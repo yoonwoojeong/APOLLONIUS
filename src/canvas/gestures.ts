@@ -6,7 +6,8 @@ import type { SnapTarget } from './snap';
 export const TAP_SLOP_PX = 6;
 
 export type GestureState =
-  | { mode: 'idle' }
+  /** `press`: a two-point tool's press on a non-endpoint, still within the tap slop. */
+  | { mode: 'idle'; press?: Vec }
   | { mode: 'dragging'; from: SnapTarget; current: SnapTarget | null; startScreen: Vec }
   | {
       mode: 'armed';
@@ -24,7 +25,11 @@ export type GestureEvent =
   | { type: 'tool'; tool: ToolId };
 
 export type GestureEffect =
-  { type: 'commit'; command: Command } | { type: 'invalid' } | { type: 'lock'; target: SnapTarget };
+  | { type: 'commit'; command: Command }
+  | { type: 'invalid' }
+  | { type: 'lock'; target: SnapTarget }
+  /** A two-point tool tapped where there is no point to start from; `at` is the press (screen). */
+  | { type: 'miss'; at: Vec };
 
 type Ctx = { tool: ToolId; allocId: () => ObjId };
 type Result = { state: GestureState; effects: GestureEffect[] };
@@ -122,8 +127,17 @@ export function gestureReducer(state: GestureState, ev: GestureEvent, ctx: Ctx):
 
   switch (state.mode) {
     case 'idle': {
+      const press = state.press;
+      if (press && ev.type === 'move') {
+        return dist(ev.screen, press) <= TAP_SLOP_PX ? { state, effects: [] } : idle();
+      }
+      if (press && ev.type === 'up') {
+        return idle(dist(ev.screen, press) <= TAP_SLOP_PX ? [{ type: 'miss', at: press }] : []);
+      }
       if (ev.type !== 'down') return idle();
-      if (twoPoint && !isEndpoint(ev.target)) return idle();
+      if (twoPoint && !isEndpoint(ev.target)) {
+        return { state: { mode: 'idle', press: ev.screen }, effects: [] };
+      }
       if (!ev.target) return idle();
       return {
         state: { mode: 'dragging', from: ev.target, current: ev.target, startScreen: ev.screen },

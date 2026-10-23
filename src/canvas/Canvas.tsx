@@ -188,7 +188,18 @@ export function Canvas({ store, coach, onView }: Props) {
   /** Invalid: shake the ghost the gesture was showing (a ring at its start), then clear. */
   const startShake = (g: GestureState): void => {
     const ghost = ghostFor(g, live.current.tool, pointer.current);
-    if (!ghost) return;
+    if (ghost) playShake(ghost);
+  };
+
+  /** A two-point tool tapped empty space: the same ring shakes alone where it was pressed. */
+  const startMiss = (at: Vec): void => {
+    const v = vpRef.current;
+    if (!v) return;
+    const w = toWorld(v, at);
+    playShake({ tool: live.current.tool, from: w, to: w });
+  };
+
+  const playShake = (ghost: GhostView): void => {
     window.clearTimeout(shakeTimer.current);
     setShake({ ...ghost, shake: ++keys.current });
     // animationend clears it; the timer covers a missed event.
@@ -202,6 +213,7 @@ export function Canvas({ store, coach, onView }: Props) {
       return;
     }
     if (eff.type === 'invalid') return startShake(before);
+    if (eff.type === 'miss') return startMiss(eff.at);
     const r = store.apply(eff.command);
     ownRevision.current = store.revision.peek();
     if (r.ok) return; // useSceneAnimation draws it on

@@ -9,6 +9,7 @@ import {
   inputOf,
   pointCenter,
   solveLevel1,
+  tap,
   touch,
 } from './helpers';
 
@@ -121,6 +122,28 @@ test('releasing a line drag over empty space commits nothing and clears the ghos
   await drag(page, a, { x: (a.x + b.x) / 2, y: a.y - 120 }, input);
   // Only the given segment AB remains.
   await expect(page.locator('[data-kind="line"]:not(.is-given)')).toHaveCount(0);
+  await expectCount(page, 'ghost', 0);
+  await expect(counter(page)).toHaveText('L 0/4 · E 0/4');
+});
+
+test('tapping empty space with the line tool shakes a ring there; a drag does not', async ({
+  page,
+}, info) => {
+  const input = inputOf(info.project.name);
+  await beginLevel1(page);
+  await page.getByRole('button', { name: 'Line', exact: true }).click();
+  const a = await pointCenter(page, 'A');
+  const b = await pointCenter(page, 'B');
+  const empty = { x: (a.x + b.x) / 2, y: a.y + 90 };
+  await tap(page, empty, input);
+  const ring = page.locator('[data-kind="ghost"].is-shaking .ghost-ring');
+  await expect(ring).toHaveCount(1);
+  const box = (await ring.boundingBox())!;
+  expect(Math.abs(box.x + box.width / 2 - empty.x)).toBeLessThan(8); // the shake moves it ±5 px
+  expect(Math.abs(box.y + box.height / 2 - empty.y)).toBeLessThan(4);
+  await expectCount(page, 'ghost', 0);
+  await drag(page, empty, { x: empty.x + 60, y: empty.y + 20 }, input);
+  await page.waitForTimeout(50);
   await expectCount(page, 'ghost', 0);
   await expect(counter(page)).toHaveText('L 0/4 · E 0/4');
 });

@@ -213,9 +213,39 @@ describe('gestureReducer', () => {
     expect(r.effects).toEqual([{ type: 'lock', target: B }]);
   });
 
-  it('two-point tool ignores down on non-endpoint targets', () => {
+  it('two-point tool: a tap on empty space or a curve → miss at the press, still idle', () => {
     const e: SnapTarget = { kind: 'empty', pos: { x: 0, y: 0 } };
-    expect(run('line', [down(e), up(e)])).toEqual({ state: { mode: 'idle' }, effects: [] });
+    expect(run('line', [down(e, 20, 30), up(e, 22, 31)])).toEqual({
+      state: { mode: 'idle' },
+      effects: [{ type: 'miss', at: scr(20, 30) }],
+    });
+    // A curve is not a target for two-point tools: the snap reports nothing there.
+    expect(run('circle', [down(null, 5, 5), up(null, 5, 5)]).effects).toEqual([
+      { type: 'miss', at: scr(5, 5) },
+    ]);
+  });
+
+  it('two-point tool: a drag across empty space (a pan) → no miss', () => {
+    const e: SnapTarget = { kind: 'empty', pos: { x: 0, y: 0 } };
+    const r = run('perp-bisector', [
+      down(e, 0, 0),
+      move(e, TAP_SLOP_PX + 5, 0),
+      up(e, TAP_SLOP_PX + 5, 0),
+    ]);
+    expect(r).toEqual({ state: { mode: 'idle' }, effects: [] });
+    // Leaving the slop radius and coming back is still a drag.
+    const back = run('line', [down(e, 0, 0), move(e, 40, 0), move(e, 0, 0), up(e, 0, 0)]);
+    expect(back.effects).toEqual([]);
+  });
+
+  it('point tool on empty commits a point, never a miss', () => {
+    const e: SnapTarget = { kind: 'empty', pos: { x: 0, y: 0 } };
+    const r = run('point', [down(e), up(e)]);
+    expect(r.effects.map((x) => x.type)).toEqual(['commit']);
+  });
+
+  it('armed: down/up on empty keeps the armed state with no effect', () => {
+    const e: SnapTarget = { kind: 'empty', pos: { x: 0, y: 0 } };
     const armed: GestureState = { mode: 'armed', from: A, current: null };
     const r = run('line', [down(e, 30, 30), up(e, 30, 30)], armed);
     expect(r.state).toEqual(armed);

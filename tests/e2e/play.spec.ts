@@ -57,18 +57,38 @@ test('rapid undo during the draw-on leaves no stale circle and drops the redo ta
 }, info) => {
   const input = inputOf(info.project.name);
   const undo = page.getByRole('button', { name: 'Undo' });
+  const circles = page.locator('[data-kind="circle"]');
+  const retained = page.locator('.retained > *');
   await beginLevel1(page);
+  // Slow every CSS animation tenfold: the 220 ms draw-on now lasts 2.2 s, so the undo below
+  // lands inside it however slow the machine is.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Animation.enable');
+  await cdp.send('Animation.setPlaybackRate', { playbackRate: 0.1 });
+
   await circleFrom(page, 'A', 'B', input);
-  // Straight after the commit, while the 220 ms draw-on is still running.
+  // The circle is still drawing on (its stroke is partly hidden) when Undo is pressed.
+  const stroke = circles.locator('.stroke.draw-in');
+  await expect(stroke).toHaveCount(1);
+  const offset = await stroke.evaluate((el) => parseFloat(getComputedStyle(el).strokeDashoffset));
+  expect(offset).toBeGreaterThan(0.05);
   await undo.click();
-  await page.waitForTimeout(400);
-  expect(await page.locator('[data-kind="circle"]').count()).toBe(0);
+
+  // Only the reverse draw-out copy may remain, and it must go away too.
+  await expect(circles).toHaveCount(0);
+  await expect(retained).toHaveCount(0);
+  // Nothing comes back for the rest of the (slowed) draw-on plus a margin.
+  for (let i = 0; i < 6; i++) {
+    await page.waitForTimeout(500);
+    expect(await circles.count()).toBe(0);
+    expect(await retained.count()).toBe(0);
+  }
   await expect(counter(page)).toHaveText('L 0/4 · E 0/4');
 
   // A new command after undo drops the redo tail.
   await expect(page.getByRole('button', { name: 'Redo' })).toBeEnabled();
   await circleFrom(page, 'B', 'A', input);
-  await expectCount(page, 'circle', 1);
+  await expect(circles).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Redo' })).toBeDisabled();
 });
 

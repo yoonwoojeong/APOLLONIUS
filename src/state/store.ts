@@ -35,6 +35,7 @@ export function createStore(storage: Storage | null) {
   };
   let construction = newConstruction(levelId.value);
   let lastStep: number | null = null;
+  let maxTier: Tier = 0; // highest hint tier used in this attempt; not reset on step change
 
   const hint: ReadonlySignal<Hint | null> = computed(() => {
     void revision.value;
@@ -63,12 +64,13 @@ export function createStore(storage: Storage | null) {
     const old = progress.value.levels[l.id];
     const merged = old ? mergeStars(old.stars, stars) : stars;
     const unlockedTools = [...progress.value.unlockedTools];
-    if (l.unlocks && !unlockedTools.includes(l.unlocks)) unlockedTools.push(l.unlocks);
+    const newlyUnlocked = l.unlocks && !unlockedTools.includes(l.unlocks) ? l.unlocks : undefined;
+    if (newlyUnlocked) unlockedTools.push(newlyUnlocked);
     progress.value = {
       ...progress.value,
       levels: {
         ...progress.value.levels,
-        [l.id]: { stars: merged, hintsUsed: Math.max(old?.hintsUsed ?? 0, hintTier.value) },
+        [l.id]: { stars: merged, hintsUsed: Math.max(old?.hintsUsed ?? 0, maxTier) },
       },
       unlockedTools,
     };
@@ -77,13 +79,13 @@ export function createStore(storage: Storage | null) {
       stars,
       explanation: l.explain(deriveFacts(scene), scene, match),
       match,
-      ...(l.unlocks ? { unlocked: l.unlocks } : {}),
+      ...(newlyUnlocked ? { unlocked: newlyUnlocked } : {}),
     };
   };
 
   const changed = (): void => {
     revision.value++;
-    checkCompletion(); // before the tier reset, so hintsUsed sees the tier in force
+    checkCompletion();
     const step = hint.peek()?.stepIndex ?? null;
     if (step !== lastStep) {
       lastStep = step;
@@ -97,6 +99,7 @@ export function createStore(storage: Storage | null) {
     completion.value = null;
     lastResult.value = null;
     hintTier.value = 0;
+    maxTier = 0;
     tool.value = 'point';
     revision.value++;
     lastStep = hint.peek()?.stepIndex ?? null;
@@ -142,7 +145,10 @@ export function createStore(storage: Storage | null) {
       changed();
     },
     requestHint(): void {
-      if (hint.peek() && hintTier.value < 3) hintTier.value = (hintTier.value + 1) as Tier;
+      if (hint.peek() && hintTier.value < 3) {
+        hintTier.value = (hintTier.value + 1) as Tier;
+        maxTier = Math.max(maxTier, hintTier.value) as Tier;
+      }
     },
     nextLevel(): void {
       const i = LEVELS.findIndex((l) => l.id === levelId.value);

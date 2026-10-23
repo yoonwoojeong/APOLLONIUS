@@ -56,23 +56,43 @@ test('selectTool ignores tools not available', () => {
   expect(s.tool.value).toBe('circle');
 });
 
-test('stars merge across attempts', () => {
+test('stars merge across attempts: earlier stars survive a worse attempt', () => {
   const { storage } = memStorage();
   storage.setItem(
     STORAGE_KEY,
     JSON.stringify({
       version: 1,
-      levels: { equilateral: { stars: [false, false, true], hintsUsed: 3 } },
+      levels: { equilateral: { stars: [true, true, true], hintsUsed: 0 } },
       unlockedTools: [],
     }),
   );
   const s = createStore(storage);
   s.openLevel('equilateral');
-  playReferenceInto(s);
-  expect(s.progress.value.levels.equilateral).toEqual({
-    stars: [true, true, true],
-    hintsUsed: 3,
+  // A wasteful extra circle pushes this attempt over the line and element targets.
+  const extra = s.apply({
+    type: 'add',
+    objects: [
+      { id: 'p', def: { type: 'free-point', pos: { x: 0.3, y: 0.9 } } },
+      { id: 'c', def: { type: 'circle', center: 'A', through: 'p' } },
+    ],
   });
+  expect(extra.ok).toBe(true);
+  playReferenceInto(s);
+  const c = s.completion.value;
+  expect(c).not.toBeNull();
+  expect(c?.stars[1] && c?.stars[2]).toBe(false);
+  expect(s.progress.value.levels.equilateral?.stars).toEqual([true, true, true]);
+});
+
+test('replaying does not report the unlock again', () => {
+  const s = createStore(null);
+  s.openLevel('midpoint');
+  playReferenceInto(s);
+  expect(s.completion.value?.unlocked).toBe('perp-bisector');
+  s.openLevel('midpoint');
+  playReferenceInto(s);
+  expect(s.completion.value).not.toBeNull();
+  expect(s.completion.value?.unlocked).toBeUndefined();
 });
 
 test('coincidental solution never completes', () => {
@@ -99,15 +119,17 @@ test('hintTier caps at 3 and resets when the target step changes', () => {
   expect(s.hintTier.value).toBe(0);
 });
 
-test('hintsUsed records the tier in force at completion', () => {
+test('hintsUsed records the max tier used during the attempt', () => {
   const s = createStore(null);
   s.openLevel('equilateral');
   const steps = LEVELS[0]!.reference;
-  for (const step of steps.slice(0, -1)) s.apply({ type: 'add', objects: step.objects });
-  s.requestHint();
-  s.requestHint();
-  s.apply({ type: 'add', objects: steps[steps.length - 1]!.objects });
-  expect(s.progress.value.levels.equilateral?.hintsUsed).toBe(2);
+  for (let i = 0; i < 3; i++) s.requestHint();
+  expect(s.hintTier.value).toBe(3);
+  s.apply({ type: 'add', objects: steps[0]!.objects });
+  expect(s.hintTier.value).toBe(0);
+  for (const step of steps.slice(1)) s.apply({ type: 'add', objects: step.objects });
+  expect(s.completion.value).not.toBeNull();
+  expect(s.progress.value.levels.equilateral?.hintsUsed).toBe(3);
 });
 
 test('level 2 locked until level 1 completed', () => {

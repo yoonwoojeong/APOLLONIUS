@@ -35,9 +35,25 @@ test('corrupt JSON → fresh progress and console.warn', () => {
   expect(warn).toHaveBeenCalled();
 });
 
-test('unknown version → fresh progress', () => {
+test('unknown version → fresh progress and console.warn', () => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   const p = loadProgress({ getItem: () => JSON.stringify({ version: 2, levels: {}, unlockedTools: ['x'] }) });
   expect(p).toEqual({ version: 1, levels: {}, unlockedTools: [] });
+  expect(warn).toHaveBeenCalled();
+});
+
+test.each([
+  ['malformed level entry', { version: 1, levels: { equilateral: {} }, unlockedTools: [] }],
+  ['non-object', 5],
+  ['unknown tool', { version: 1, levels: {}, unlockedTools: ['laser'] }],
+  [
+    'bad stars',
+    { version: 1, levels: { equilateral: { stars: [true], hintsUsed: 0 } }, unlockedTools: [] },
+  ],
+])('%s → fresh progress and console.warn', (_name, value) => {
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  expect(loadProgress({ getItem: () => JSON.stringify(value) }).levels).toEqual({});
+  expect(warn).toHaveBeenCalled();
 });
 
 test('throwing storage is tolerated', () => {

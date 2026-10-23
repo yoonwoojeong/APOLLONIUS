@@ -12,7 +12,7 @@ import {
   type GestureState,
 } from './gestures';
 import { Magnifier } from './Magnifier';
-import { SceneLayer, type GhostView } from './SceneLayer';
+import { SceneLayer, SETTLE_MS, type GhostView } from './SceneLayer';
 import { gridPattern } from './shapes';
 import { findSnap, type InputKind, type SnapTarget } from './snap';
 import { useSceneAnimation } from './useSceneAnimation';
@@ -40,9 +40,13 @@ const inputKind = (e: PointerEvent): InputKind =>
 const isEndpoint = (t: SnapTarget | null): boolean =>
   !!t && (t.kind === 'point' || t.kind === 'candidate');
 
-const isTyping = (t: EventTarget | null): boolean =>
-  t instanceof HTMLElement &&
-  (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName));
+/** Text entry keeps its own keys (Space, Esc); buttons do not count. */
+const isTextEntry = (t: EventTarget | null): boolean =>
+  t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+
+/** Focus on a control (e.g. the tool button just clicked) rather than on the page or canvas. */
+const isControl = (t: EventTarget | null): boolean =>
+  t instanceof HTMLElement && t !== document.body && !(t instanceof SVGElement);
 
 /** Ghost from the gesture's start to the snapped endpoint, or to the raw pointer. */
 function ghostFor(g: GestureState, tool: ToolId, pointer: Vec | null): GhostView | null {
@@ -64,7 +68,7 @@ export function Canvas({ store }: { store: Store }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const view = useViewport(level.view, construction, svgRef);
   const { vp, vpRef, size } = view;
-  const { animating, announce, retainedEnd } = useSceneAnimation(construction, scene);
+  const { animating, announce, retainedEnd, drawnIn } = useSceneAnimation(construction, scene);
 
   const [, setTick] = useState(0);
   const [hover, setHover] = useState<SnapTarget | null>(null);
@@ -87,6 +91,8 @@ export function Canvas({ store }: { store: Store }) {
   const space = useRef(false);
   const keys = useRef(0);
   const shakeTimer = useRef(0);
+  const pulseTimer = useRef(0);
+  const overCanvas = useRef(false);
 
   // Latest render values for event handlers.
   const live = useRef({ scene, candidates, tool });
@@ -133,8 +139,12 @@ export function Canvas({ store }: { store: Store }) {
     if (eff.type === 'invalid') return startShake(before);
     const r = store.apply(eff.command);
     if (r.ok) return; // useSceneAnimation draws it on
-    if (r.reason === 'duplicate') setPulse({ ids: [r.existingId], key: ++keys.current });
-    else startShake(before);
+    if (r.reason === 'duplicate') {
+      setPulse({ ids: [r.existingId], key: ++keys.current });
+      // animationend clears it; the timer covers a pulse that never ran (off-screen).
+      window.clearTimeout(pulseTimer.current);
+      pulseTimer.current = window.setTimeout(() => setPulse(null), SETTLE_MS);
+    } else startShake(before);
   };
 
   function dispatch(ev: GestureEvent, kind: InputKind = primary.current?.kind ?? 'mouse'): void {
@@ -186,7 +196,8 @@ export function Canvas({ store }: { store: Store }) {
     const v = vpRef.current;
     if (!v) return;
     if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
-    e.preventDefault();
+    e.preventDefault(); // also suppresses the focus change, so move focus here ourselves
+    svgRef.current?.focus({ preventScroll: true });
     const pt = local(e);
     const kind = inputKind(e);
     pointers.current.set(e.pointerId, pt);
@@ -217,6 +228,7 @@ export function Canvas({ store }: { store: Store }) {
   };
 
   const onPointerMove = (e: PointerEvent): void => {
+    overCanvas.current = true;
     const v = vpRef.current;
     if (!v) return;
     const pt = local(e);
@@ -276,6 +288,7 @@ export function Canvas({ store }: { store: Store }) {
 
   const onPointerLeave = (e: PointerEvent): void => {
     if (pointers.current.has(e.pointerId)) return;
+    overCanvas.current = false;
     setHover(null);
     pointer.current = null;
     setTick((t) => t + 1);
@@ -284,8 +297,11 @@ export function Canvas({ store }: { store: Store }) {
   // Keyboard: Space+drag pans, Esc cancels the gesture.
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (isTyping(e.target)) return;
+      if (isTextEntry(e.target)) return;
       if (e.key === ' ') {
+        // On a focused control Space is the pan modifier only while the pointer is over the
+        // canvas (or already panning); otherwise it keeps activating the control.
+        if (isControl(e.target) && !overCanvas.current && !space.current) return;
         e.preventDefault();
         space.current = true;
         setSpaceHeld(true);
@@ -295,7 +311,8 @@ export function Canvas({ store }: { store: Store }) {
       }
     };
     const up = (e: KeyboardEvent) => {
-      if (e.key !== ' ') return;
+      if (e.key !== ' ' || !space.current) return;
+      e.preventDefault(); // a button activates on Space keyup: not while it was the pan key
       space.current = false;
       setSpaceHeld(false);
     };
@@ -305,6 +322,7 @@ export function Canvas({ store }: { store: Store }) {
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
       window.clearTimeout(shakeTimer.current);
+      window.clearTimeout(pulseTimer.current);
     };
   }, []);
 
@@ -324,6 +342,8 @@ export function Canvas({ store }: { store: Store }) {
         class={cls}
         role="application"
         aria-label={`Construction canvas: ${level.title}`}
+        tabindex={-1}
+        onPointerEnter={() => (overCanvas.current = true)}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -368,6 +388,8 @@ export function Canvas({ store }: { store: Store }) {
               goldMatch={goldMatch}
               animating={animating}
               onRetainedEnd={retainedEnd}
+              onDrawnIn={drawnIn}
+              onHighlightEnd={() => setPulse(null)}
               onGhostEnd={() => setShake(null)}
             />
           )}

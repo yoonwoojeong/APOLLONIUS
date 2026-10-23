@@ -23,6 +23,11 @@
   shape-rendering: geometricPrecision;
 }
 
+/* Focused programmatically on pointerdown so Space/Esc reach it; it is not a tab stop. */
+.canvas:focus {
+  outline: none;
+}
+
 .canvas.is-grab {
   cursor: grab;
 }

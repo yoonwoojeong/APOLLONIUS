@@ -82,3 +82,64 @@ describe('SceneLayer', () => {
     expect(host.querySelectorAll('[data-kind="ghost"]')).toHaveLength(1);
   });
 });
+
+/** jsdom has no `onanimationend`, so Preact listens for the event under its JSX-cased name. */
+const animationEnd = (el: Element) =>
+  el.dispatchEvent(
+    new Event('onanimationend' in el ? 'animationend' : 'AnimationEnd', { bubbles: true }),
+  );
+
+describe('SceneLayer one-shot animations', () => {
+  const withCircle = () => {
+    const c = new Construction(level.givens, level.labels, level.sceneDiameter);
+    c.apply({
+      type: 'add',
+      objects: [{ id: 'c1', def: { type: 'circle', center: 'A', through: 'B' } }],
+    });
+    return c.scene();
+  };
+
+  function mountWith(props: Partial<Parameters<typeof SceneLayer>[0]>) {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(
+      <svg>
+        <SceneLayer scene={withCircle()} view={view} ghost={null} snap={null} {...props} />
+      </svg>,
+      host,
+    );
+    return host;
+  }
+
+  it('reports a finished draw-on so it is not replayed on pan/zoom', () => {
+    const done: string[] = [];
+    const host = mountWith({
+      animating: { key: 1, drawIn: ['c1'], drawOut: null },
+      onDrawnIn: (id) => done.push(id),
+    });
+    const stroke = host.querySelector('[data-id="c1"] .draw-in')!;
+    expect(stroke).not.toBeNull();
+    animationEnd(stroke);
+    expect(done).toEqual(['c1']);
+  });
+
+  it('reports a finished duplicate pulse', () => {
+    let ended = 0;
+    const host = mountWith({ highlight: { ids: ['c1'], key: 1 }, onHighlightEnd: () => ended++ });
+    animationEnd(host.querySelector('.pulse-stroke')!);
+    expect(ended).toBe(1);
+  });
+
+  it('draws the gold overlay on once, then keeps it without draw-in', () => {
+    const host = mountWith({
+      goldMatch: { ids: ['c1'], gold: [{ kind: 'circle', c: { x: 0, y: 0 }, r: 1 }] },
+    });
+    const layer = host.querySelector('.gold-layer')!;
+    expect(layer.querySelector('.draw-in')).not.toBeNull();
+    animationEnd(layer.querySelector('.draw-in')!);
+    return Promise.resolve().then(() => {
+      expect(host.querySelector('.gold-layer .draw-in')).toBeNull();
+      expect(host.querySelector('.gold-layer .gold-stroke')).not.toBeNull();
+    });
+  });
+});

@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { circlePath, gridOpacity, linePath, magnifierPlacement } from '../../../src/canvas/shapes';
+import {
+  circlePath,
+  gridOpacity,
+  linePath,
+  magnifierPlacement,
+  objectShapes,
+} from '../../../src/canvas/shapes';
+import { fit, panBy } from '../../../src/canvas/viewport';
+import { Construction } from '../../../src/construction/construction';
+import { levelById } from '../../../src/levels';
 import type { LineG } from '../../../src/geometry/curves';
 
 const rect = { x: 0, y: 0, w: 100, h: 50 };
@@ -104,5 +113,30 @@ describe('magnifierPlacement', () => {
 
   it('keeps the loupe inside the canvas horizontally', () => {
     expect(magnifierPlacement({ x: 10, y: 300 }, { width: 400, height: 600 }).x).toBe(56);
+  });
+});
+
+describe('objectShapes keys', () => {
+  it('keeps a stable key for each ray of a player line when one is clipped away', () => {
+    const level = levelById('equilateral');
+    const c = new Construction(level.givens, level.labels, level.sceneDiameter);
+    c.apply({
+      type: 'add',
+      objects: [
+        { id: 'p1', def: { type: 'free-point', pos: { x: -1, y: -1 } } },
+        { id: 'l1', def: { type: 'line', a: 'A', b: 'p1' } },
+      ],
+    });
+    const s = c.scene();
+    const line = s.byId.get('l1')!;
+    const vp = fit(level.view, 800, 600, 24);
+    expect(objectShapes(line, s, vp).map((x) => x.key)).toEqual(['fwd', 'back']);
+    // Pan the line's first point A off one edge, then the other: each time one ray is
+    // clipped away and the survivor keeps its own key (no remount, no replayed draw-on).
+    const down = objectShapes(line, s, panBy(vp, { x: 0, y: 2000 })).map((x) => x.key);
+    const up = objectShapes(line, s, panBy(vp, { x: 0, y: -2000 })).map((x) => x.key);
+    expect(down).toHaveLength(1);
+    expect(up).toHaveLength(1);
+    expect([...down, ...up].sort()).toEqual(['back', 'fwd']);
   });
 });

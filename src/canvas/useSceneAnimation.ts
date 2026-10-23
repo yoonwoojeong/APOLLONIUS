@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Construction } from '../construction/construction';
 import { describe } from '../construction/describe';
 import type { ObjId, Scene } from '../construction/types';
-import type { Animating } from './SceneLayer';
+import { SETTLE_MS, type Animating } from './SceneLayer';
 import { reducedMotion } from './useViewport';
 
 export interface SceneAnimation {
@@ -11,6 +11,8 @@ export interface SceneAnimation {
   announce: string;
   /** A retained (removed) object finished its reverse draw-on. */
   retainedEnd: (id: ObjId) => void;
+  /** An added object finished drawing on: it must not replay when pan/zoom remounts it. */
+  drawnIn: (id: ObjId) => void;
 }
 
 /**
@@ -25,6 +27,7 @@ export function useSceneAnimation(construction: Construction, scene: Scene): Sce
   const [announce, setAnnounce] = useState('');
   const prev = useRef<{ construction: Construction; scene: Scene } | null>(null);
   const key = useRef(0);
+  const settle = useRef(0);
 
   useEffect(() => {
     const before = prev.current;
@@ -38,12 +41,17 @@ export function useSceneAnimation(construction: Construction, scene: Scene): Sce
     const drawOut =
       removed.length && !reducedMotion() ? { scene: before.scene, ids: removed } : null;
     setAnimating({ key: ++key.current, drawIn: added, drawOut });
+    // Fallback for objects whose animationend never fires (e.g. drawn while off-screen).
+    window.clearTimeout(settle.current);
+    settle.current = window.setTimeout(() => setAnimating(null), SETTLE_MS);
     const text = added
       .flatMap((id) => scene.byId.get(id) ?? [])
       .map((o) => describe(o, scene))
       .join('. ');
     if (text) setAnnounce(text);
   }, [construction, scene]);
+
+  useEffect(() => () => window.clearTimeout(settle.current), []);
 
   const retainedEnd = (id: ObjId): void =>
     setAnimating((a) =>
@@ -52,5 +60,10 @@ export function useSceneAnimation(construction: Construction, scene: Scene): Sce
         : a,
     );
 
-  return { animating, announce, retainedEnd };
+  const drawnIn = (id: ObjId): void =>
+    setAnimating((a) =>
+      a?.drawIn.includes(id) ? { ...a, drawIn: a.drawIn.filter((x) => x !== id) } : a,
+    );
+
+  return { animating, announce, retainedEnd, drawnIn };
 }

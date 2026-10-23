@@ -14,7 +14,11 @@ export interface Seg {
   y2: number;
 }
 
-export type Shape = ({ tag: 'line' } & Seg) | { tag: 'path'; d: string };
+/**
+ * `key` is stable per role (e.g. a line's forward and backward ray) so a shape that is
+ * clipped away and back during pan/zoom keeps its identity instead of re-mounting.
+ */
+export type Shape = { key: string } & (({ tag: 'line' } & Seg) | { tag: 'path'; d: string });
 
 /** Lines and rays extend this far past the canvas edge so their caps never show. */
 const BLEED = 8;
@@ -91,9 +95,11 @@ const flip = (l: LineG): LineG => ({ ...l, d: scale(l.d, -1) });
 
 /** A full line as two rays sweeping outward from `origin` (both start there). */
 function raysFrom(l: LineG, origin: Vec, rect: Rect): Shape[] {
-  return [linePath(l, rect, { from: origin }), linePath(flip(l), rect, { from: origin })]
-    .filter((s): s is Seg => !!s)
-    .map((s) => ({ tag: 'line', ...s }));
+  const rays: Array<[string, Seg | null]> = [
+    ['fwd', linePath(l, rect, { from: origin })],
+    ['back', linePath(flip(l), rect, { from: origin })],
+  ];
+  return rays.flatMap(([key, s]) => (s ? [{ key, tag: 'line' as const, ...s }] : []));
 }
 
 function pointOf(scene: Scene, id: string, vp: Viewport): Vec | null {
@@ -113,7 +119,7 @@ export function objectShapes(obj: SceneObject, scene: Scene, vp: Viewport): Shap
   const def = obj.def;
   if (c.kind === 'circle') {
     const start = def.type === 'circle' ? pointOf(scene, def.through, vp) : null;
-    return [{ tag: 'path', d: circlePath(c, start ?? add(c.c, { x: c.r, y: 0 })) }];
+    return [{ key: 'circle', tag: 'path', d: circlePath(c, start ?? add(c.c, { x: c.r, y: 0 })) }];
   }
   if (def.type === 'given-line') {
     const a = pointOf(scene, def.a, vp);
@@ -124,7 +130,7 @@ export function objectShapes(obj: SceneObject, scene: Scene, vp: Viewport): Shap
       const dir = paramOf(c, b) >= paramOf(c, a) ? c : flip(c);
       seg = linePath(dir, rect, { from: a });
     } else seg = linePath(c, rect);
-    return seg ? [{ tag: 'line', ...seg }] : [];
+    return seg ? [{ key: 'line', tag: 'line', ...seg }] : [];
   }
   if (def.type === 'line') return raysFrom(c, pointOf(scene, def.a, vp) ?? c.p, rect);
   return raysFrom(c, c.p, rect);
@@ -133,7 +139,8 @@ export function objectShapes(obj: SceneObject, scene: Scene, vp: Viewport): Shap
 /** Screen shapes for a free-standing curve value (gold overlays); lines sweep from `p`. */
 export function curveShapes(v: Curve, vp: Viewport): Shape[] {
   const c = curveToScreen(v, vp);
-  if (c.kind === 'circle') return [{ tag: 'path', d: circlePath(c, add(c.c, { x: c.r, y: 0 })) }];
+  if (c.kind === 'circle')
+    return [{ key: 'circle', tag: 'path', d: circlePath(c, add(c.c, { x: c.r, y: 0 })) }];
   return raysFrom(c, c.p, screenRect(vp));
 }
 
@@ -147,22 +154,25 @@ export function ghostShapes(tool: ToolId, from: Vec, to: Vec, vp: Viewport): Sha
   if (dist(a, b) < 1) return [];
   const rect = screenRect(vp);
   if (tool === 'circle')
-    return [{ tag: 'path', d: circlePath({ kind: 'circle', c: a, r: dist(a, b) }, b) }];
+    return [
+      { key: 'circle', tag: 'path', d: circlePath({ kind: 'circle', c: a, r: dist(a, b) }, b) },
+    ];
   if (tool === 'line') {
     const l = linePathThrough(a, b, rect);
-    return l ? [{ tag: 'line', ...l }] : [];
+    return l ? [{ key: 'line', tag: 'line', ...l }] : [];
   }
   if (tool === 'perp-bisector') {
     const pb = perpBisector(a, b);
     const seg = pb ? linePath(pb, rect) : null;
     const link: Shape = {
+      key: 'link',
       tag: 'line',
       x1: round(a.x),
       y1: round(a.y),
       x2: round(b.x),
       y2: round(b.y),
     };
-    return seg ? [{ tag: 'line', ...seg }, link] : [link];
+    return seg ? [{ key: 'line', tag: 'line', ...seg }, link] : [link];
   }
   return [];
 }

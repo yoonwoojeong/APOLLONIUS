@@ -1,4 +1,4 @@
-import { useMemo } from 'preact/hooks';
+import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { ObjId, Scene, SceneObject } from '../construction/types';
 import type { Curve } from '../geometry/curves';
 import type { Vec } from '../geometry/vec';
@@ -38,10 +38,16 @@ interface Props {
   hintIds?: ObjId[];
   animating?: Animating | null;
   onRetainedEnd?: (id: ObjId) => void;
+  /** An object in `animating.drawIn` finished drawing on; drop it so pan/zoom never replays it. */
+  onDrawnIn?: (id: ObjId) => void;
+  /** The duplicate pulse finished; clear `highlight` so pan/zoom never replays it. */
+  onHighlightEnd?: () => void;
   onGhostEnd?: () => void;
 }
 
 export const POINT_R = 4;
+/** Fallback for a one-shot animation whose animationend never fires (e.g. drawn off-screen). */
+export const SETTLE_MS = 600;
 const CANDIDATE_R = 3;
 const HIT_R = 14;
 const SNAP_SCALE = 1.4;
@@ -49,11 +55,11 @@ const SNAP_SCALE = 1.4;
 function ShapeEls({ shapes, cls }: { shapes: Shape[]; cls: string }) {
   return (
     <>
-      {shapes.map((s, i) =>
+      {shapes.map((s) =>
         s.tag === 'line' ? (
-          <line key={i} class={cls} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} pathLength={1} />
+          <line key={s.key} class={cls} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} pathLength={1} />
         ) : (
-          <path key={i} class={cls} d={s.d} pathLength={1} />
+          <path key={s.key} class={cls} d={s.d} pathLength={1} />
         ),
       )}
     </>
@@ -69,16 +75,28 @@ function CurveEl(p: {
   view: Viewport;
   cls: string;
   anim?: string;
+  onAnimEnd?: (id: ObjId) => void;
 }) {
   const { obj } = p;
   return (
-    <g data-kind={curveKind(obj)} data-id={obj.id} class={p.cls}>
+    <g
+      data-kind={curveKind(obj)}
+      data-id={obj.id}
+      class={p.cls}
+      onAnimationEnd={p.anim ? () => p.onAnimEnd?.(obj.id) : undefined}
+    >
       <ShapeEls shapes={objectShapes(obj, p.scene, p.view)} cls={`stroke ${p.anim ?? ''}`} />
     </g>
   );
 }
 
-function PointEl(p: { obj: SceneObject; pos: Vec; cls: string; anim?: string }) {
+function PointEl(p: {
+  obj: SceneObject;
+  pos: Vec;
+  cls: string;
+  anim?: string;
+  onAnimEnd?: (id: ObjId) => void;
+}) {
   const name = p.obj.label ?? p.obj.id;
   return (
     <g
@@ -90,6 +108,7 @@ function PointEl(p: { obj: SceneObject; pos: Vec; cls: string; anim?: string }) 
       aria-label={`Point ${name}`}
       class={p.cls}
       transform={`translate(${p.pos.x} ${p.pos.y})`}
+      onAnimationEnd={p.anim ? () => p.onAnimEnd?.(p.obj.id) : undefined}
     >
       <circle class="hit" r={HIT_R} />
       <circle class={`dot ${p.anim ?? ''}`} r={POINT_R} />
@@ -140,18 +159,37 @@ function GhostEl({ ghost, view, onEnd }: { ghost: GhostView; view: Viewport; onE
   );
 }
 
-function GoldEl({ g, view }: { g: Vec | Curve; view: Viewport }) {
+function GoldEl({ g, view, drawing }: { g: Vec | Curve; view: Viewport; drawing: boolean }) {
   if (isCurveValue(g)) {
     return (
       <g data-kind="gold" class="gold">
-        <ShapeEls shapes={curveShapes(g, view)} cls="gold-stroke draw-in" />
+        <ShapeEls
+          shapes={curveShapes(g, view)}
+          cls={drawing ? 'gold-stroke draw-in' : 'gold-stroke'}
+        />
       </g>
     );
   }
   const p = toScreen(view, g);
   return (
     <g data-kind="gold" class="gold" transform={`translate(${p.x} ${p.y})`}>
-      <circle class="gold-dot pop-in" r={POINT_R * SNAP_SCALE} />
+      <circle class={drawing ? 'gold-dot pop-in' : 'gold-dot'} r={POINT_R * SNAP_SCALE} />
+    </g>
+  );
+}
+
+/** The goal overlay draws on once when it mounts (a completion), never again on pan/zoom. */
+function GoldLayer({ match, view }: { match: GoalMatch; view: Viewport }) {
+  const [drawing, setDrawing] = useState(true);
+  useEffect(() => {
+    const t = window.setTimeout(() => setDrawing(false), SETTLE_MS);
+    return () => window.clearTimeout(t);
+  }, []);
+  return (
+    <g class="gold-layer" onAnimationEnd={() => setDrawing(false)}>
+      {match.gold.map((g, i) => (
+        <GoldEl key={i} g={g} view={view} drawing={drawing} />
+      ))}
     </g>
   );
 }
@@ -195,6 +233,7 @@ export function SceneLayer(props: Props) {
             view={view}
             cls={objCls(o)}
             anim={drawIn.has(o.id) ? 'draw-in' : undefined}
+            onAnimEnd={props.onDrawnIn}
           />
         ))}
       </g>
@@ -216,13 +255,7 @@ export function SceneLayer(props: Props) {
           </g>
         ))}
       </g>
-      {goldMatch && (
-        <g class="gold-layer">
-          {goldMatch.gold.map((g, i) => (
-            <GoldEl key={i} g={g} view={view} />
-          ))}
-        </g>
-      )}
+      {goldMatch && <GoldLayer match={goldMatch} view={view} />}
       <g class="candidates">
         {candidates.map((c) => {
           const p = toScreen(view, c.pos);
@@ -249,11 +282,12 @@ export function SceneLayer(props: Props) {
             pos={toScreen(view, o.value as Vec)}
             cls={objCls(o)}
             anim={drawIn.has(o.id) ? 'pop-in' : undefined}
+            onAnimEnd={props.onDrawnIn}
           />
         ))}
       </g>
       {snap && <SnapMarker key={props.lockKey ?? 0} snap={snap} scene={scene} view={view} />}
-      <g class="pulses" aria-hidden="true">
+      <g class="pulses" aria-hidden="true" onAnimationEnd={() => props.onHighlightEnd?.()}>
         {pulsed.map((o) =>
           isPointValue(o.value) ? (
             <circle

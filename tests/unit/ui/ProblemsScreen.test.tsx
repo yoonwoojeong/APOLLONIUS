@@ -230,6 +230,25 @@ describe('My problems: failed saves and stale stars', () => {
     expect(host.querySelector('.pb-save-warn')!.textContent).toBe('');
   });
 
+  it('a kept draft is saved on the next visit once storage works, and the warning goes', () => {
+    const storage = memoryStorage();
+    const setItem = storage.setItem;
+    storage.setItem = () => {
+      throw new Error('quota');
+    };
+    const { store, host } = mount(storage);
+    click(byText(host, 'New problem'));
+    const ed = activeEditor(store).value!;
+    act(() => ed.setDetails({ title: 'Later' }));
+    act(() => ed.exit());
+    act(() => store.goToMap());
+    storage.setItem = setItem;
+    act(() => store.goToProblems());
+    expect(titles(host)).toEqual(['Later']);
+    expect(loadDrafts(storage).map((d) => d.problem.title)).toEqual(['Later']);
+    expect(host.querySelector('.pb-save-warn')!.textContent).toBe('');
+  });
+
   it('stars show only while the problem is the tested one', () => {
     const p = level1();
     const storage = memoryStorage([

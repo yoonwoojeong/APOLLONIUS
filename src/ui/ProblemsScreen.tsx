@@ -163,8 +163,11 @@ export function ProblemsScreen({ store, storage }: Props) {
 
   useEffect(() => {
     // Kept drafts are tried again; while that fails they stay kept (and the warning stays).
-    if (!hasUnsavedDrafts(store) || saveDrafts(storage, current.current)) clearUnsaved(store);
-    else setSaveFailed(true);
+    if (!hasUnsavedDrafts(store)) clearUnsaved(store);
+    else if (saveDrafts(storage, current.current)) {
+      clearUnsaved(store);
+      setSaveFailed(false);
+    } else setSaveFailed(true);
     mounted.current = true;
     return () => void (mounted.current = false);
   }, [store]);

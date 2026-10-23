@@ -142,4 +142,34 @@ describe('SceneLayer one-shot animations', () => {
       expect(host.querySelector('.gold-layer .gold-stroke')).not.toBeNull();
     });
   });
+
+  it('glows hint inputs in a layer outside the object groups', () => {
+    const host = mountWith({ hintIds: ['A', 'c1'] });
+    const glow = host.querySelector('.hint-glow')!;
+    expect(glow.getAttribute('aria-hidden')).toBe('true');
+    expect(glow.querySelectorAll('[data-hint-id]')).toHaveLength(2);
+    expect(glow.closest('[data-id]')).toBeNull();
+    expect(host.querySelector('[data-id="c1"] .hint-halo')).toBeNull();
+  });
+
+  it('draws one dashed hint ghost per ghost value', () => {
+    const host = mountWith({
+      hintGhost: [
+        { kind: 'circle', c: { x: 0, y: 0 }, r: 1 },
+        { x: 0.5, y: 0.5 },
+      ],
+    });
+    expect(host.querySelectorAll('[data-kind="hint-ghost"]')).toHaveLength(2);
+    expect(host.querySelector('[data-kind="hint-ghost"] [pathLength]')).toBeNull();
+  });
+
+  it('adds a decorative shimmer on completion, outside the gold layer', () => {
+    const host = mountWith({
+      goldMatch: { ids: ['c1'], gold: [{ kind: 'circle', c: { x: 0, y: 0 }, r: 1 }] },
+    });
+    const shimmer = host.querySelector('.shimmer')!;
+    expect(shimmer.classList.contains('no-shimmer')).toBe(true);
+    expect(shimmer.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(shimmer.closest('.gold-layer')).toBeNull();
+  });
 });

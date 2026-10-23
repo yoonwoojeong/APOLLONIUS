@@ -72,6 +72,10 @@
   stroke: var(--snap);
 }
 
+.is-hint .dot {
+  fill: var(--snap);
+}
+
 .is-goal .stroke {
   stroke: var(--gold);
 }
@@ -311,6 +315,91 @@
   fill: var(--gold);
 }
 
+/* Hints: tier 2 halo under the step's inputs, tier 3 dashed gold ghost of its result */
+
+.hint-glow,
+.hint-ghosts,
+.shimmer-layer {
+  pointer-events: none;
+}
+
+.hint-halo-stroke,
+.hint-halo-dot {
+  opacity: 0.14;
+  animation: hint-glow 1.6s ease-in-out infinite alternate;
+}
+
+.hint-halo-stroke {
+  fill: none;
+  stroke: var(--snap);
+  stroke-width: 11px;
+  stroke-linecap: round;
+}
+
+.hint-halo-dot {
+  fill: var(--snap);
+}
+
+@keyframes hint-glow {
+  from {
+    opacity: 0.1;
+  }
+  to {
+    opacity: 0.3;
+  }
+}
+
+.hint-ghost {
+  animation: fade-in var(--t-ui) var(--ease-out) both;
+}
+
+.hint-ghost-stroke,
+.hint-ghost-ring {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 2px;
+  stroke-linecap: round;
+}
+
+.hint-ghost-stroke {
+  stroke-dasharray: 7 7;
+}
+
+.hint-ghost-ring {
+  stroke-dasharray: 4 4;
+}
+
+.hint-ghost-dot {
+  fill: var(--gold);
+}
+
+/* Completion shimmer: one soft ring of gold light after the draw-on (decorative). */
+
+.shimmer {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: shimmer 900ms var(--ease-out) calc(var(--t-draw) - 40ms) both;
+}
+
+.shimmer-stop {
+  stop-color: var(--gold);
+}
+
+@keyframes shimmer {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+}
+
 /* Touch loupe */
 
 .magnifier {
@@ -368,6 +457,16 @@
 
   .pulse-dot {
     transform: scale(1.2);
+  }
+
+  .hint-halo-stroke,
+  .hint-halo-dot {
+    animation: none;
+    opacity: 0.24;
+  }
+
+  .hint-ghost {
+    animation: fade-in 80ms linear both;
   }
 }
 

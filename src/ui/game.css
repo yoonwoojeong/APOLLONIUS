@@ -268,3 +268,554 @@
     transition-duration: 80ms;
   }
 }
+
+/* Palette sits above the canvas so the tool tip can overhang it. */
+
+.palette {
+  position: relative;
+  z-index: 2;
+}
+
+.tool-slot {
+  position: relative;
+  display: flex;
+}
+
+/* Tool reveal: the new tool scales in from 0.6 with a gold ring; the ring stays while its tip shows. */
+
+.tool-btn.is-revealing {
+  animation: tool-reveal 360ms var(--ease-out) 120ms both;
+}
+
+.tool-btn.is-revealing::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border: 2px solid var(--gold);
+  border-radius: 15px;
+  opacity: 0;
+  pointer-events: none;
+  animation: reveal-ring 1600ms var(--ease-out) 200ms both;
+  transition: opacity var(--t-ui) var(--ease-out);
+}
+
+.has-tip .tool-btn.is-revealing::after {
+  opacity: 1;
+  animation: reveal-ring-in 420ms var(--ease-out) 200ms both;
+}
+
+@keyframes tool-reveal {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}
+
+@keyframes reveal-ring {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes reveal-ring-in {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+}
+
+.tool-tip {
+  position: absolute;
+  bottom: calc(100% + 14px);
+  left: 50%;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  width: max-content;
+  max-width: min(272px, calc(100vw - 32px));
+  padding: 10px 6px 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--gold) 55%, transparent);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow:
+    0 8px 24px rgb(0 0 0 / 12%),
+    0 1px 2px rgb(0 0 0 / 6%);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink);
+  cursor: pointer;
+  translate: -50% 0;
+  animation: tip-in var(--t-ui) var(--ease-out) 480ms both;
+}
+
+.tool-tip::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  border: solid color-mix(in srgb, var(--gold) 55%, transparent);
+  border-width: 0 1px 1px 0;
+  background: var(--surface);
+  translate: -50% 0;
+  rotate: 45deg;
+}
+
+.tool-tip-text {
+  padding-top: 2px;
+  text-wrap: pretty;
+}
+
+.tool-tip-close {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  margin: -2px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tool-tip-close svg,
+.hint-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+@keyframes tip-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* Hint panel: a small non-modal popover above the palette (narrow) / under the Hint button (wide). */
+
+.topbar-hint.is-open {
+  color: var(--snap);
+  background: color-mix(in srgb, var(--snap) 13%, transparent);
+}
+
+.hint-panel {
+  grid-area: canvas;
+  z-index: 3;
+  align-self: end;
+  justify-self: center;
+  width: calc(100% - 16px);
+  max-width: 420px;
+  margin-bottom: 8px;
+  padding: 8px 10px 14px 16px;
+  border: 1px solid var(--grid);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow:
+    0 10px 32px rgb(0 0 0 / 12%),
+    0 1px 3px rgb(0 0 0 / 6%);
+  --panel-from: 8px;
+  animation: panel-in var(--t-ui) var(--ease-out) both;
+}
+
+.hint-panel:focus,
+.hint-panel:focus-visible {
+  outline: none;
+}
+
+.hint-panel:focus-visible {
+  border-color: color-mix(in srgb, var(--snap) 60%, transparent);
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--panel-from));
+  }
+}
+
+.hint-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hint-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hint-eyebrow svg {
+  width: 16px;
+  height: 16px;
+}
+
+.hint-steps {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: auto;
+}
+
+.hint-step {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--grid);
+  transition: background-color var(--t-ui) var(--ease-out);
+}
+
+.hint-step.is-on {
+  background: var(--snap);
+}
+
+.hint-close {
+  width: 36px;
+  height: 36px;
+}
+
+.hint-nudge {
+  margin: 2px 6px 0 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  line-height: 1.35;
+  text-wrap: pretty;
+}
+
+.hint-tiers:not(:empty) {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.hint-tier {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  animation: panel-in var(--t-ui) var(--ease-out) both;
+}
+
+.hint-tier strong {
+  font-weight: 600;
+}
+
+.hint-caption {
+  margin-left: 6px;
+  color: var(--muted);
+}
+
+.hint-swatch {
+  flex: none;
+  width: 16px;
+  translate: 0 -3px;
+}
+
+.hint-swatch.is-where {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--snap);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--snap) 25%, transparent);
+}
+
+.hint-swatch.is-step {
+  height: 0;
+  border-top: 2px dashed var(--gold);
+}
+
+.hint-more {
+  display: block;
+  min-height: 40px;
+  margin: 12px 4px 0 auto;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--snap) 13%, transparent);
+  color: var(--snap);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color var(--t-ui) var(--ease-out);
+}
+
+.hint-more:hover {
+  background: color-mix(in srgb, var(--snap) 20%, transparent);
+}
+
+/* Completion card: a bottom sheet on phones, a centred card near the bottom on wide screens. */
+
+.completion {
+  --card-delay: calc(var(--t-draw) + 40ms);
+  grid-row: 2 / -1;
+  grid-column: 1 / -1;
+  align-self: end;
+  z-index: 4;
+  display: grid;
+  justify-items: center;
+  margin: 0;
+  padding: 18px 16px calc(14px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--grid);
+  border-radius: 18px 18px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -12px 40px rgb(0 0 0 / 12%);
+  text-align: center;
+  animation: card-in var(--t-ui) var(--ease-out) var(--card-delay) both;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+}
+
+.completion-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+.stars {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 120px));
+  justify-content: center;
+  gap: 4px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.star {
+  display: grid;
+  align-content: start;
+  justify-items: center;
+  gap: 4px;
+}
+
+.star-shape {
+  width: 34px;
+  height: 34px;
+  overflow: visible;
+}
+
+.star-outline {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+}
+
+.star[data-earned='true'] .star-outline {
+  stroke: var(--gold);
+}
+
+.star-fill {
+  fill: var(--gold);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: star-fill 240ms var(--ease-out)
+    calc(var(--card-delay) + var(--t-ui) + var(--i) * var(--t-star)) both;
+}
+
+@keyframes star-fill {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+
+.star-label {
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--muted);
+  text-wrap: balance;
+}
+
+.star[data-earned='true'] .star-label {
+  color: var(--ink);
+}
+
+.completion-why {
+  max-width: 36ch;
+  margin: 12px 0 0;
+  font-size: 15px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.completion-unlock {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 5px 14px 5px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gold) 16%, transparent);
+  font-size: 14px;
+  font-weight: 600;
+  animation: ui-fade-in var(--t-ui) var(--ease-out)
+    calc(var(--card-delay) + var(--t-ui) + 3 * var(--t-star)) both;
+}
+
+.completion-unlock svg {
+  width: 20px;
+  height: 20px;
+  color: var(--gold);
+}
+
+.completion-actions {
+  display: flex;
+  gap: 8px;
+  justify-self: stretch;
+  margin-top: 16px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--grid);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 550;
+  cursor: pointer;
+  transition:
+    background-color var(--t-ui) var(--ease-out),
+    border-color var(--t-ui) var(--ease-out);
+}
+
+.btn:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.btn.is-primary {
+  flex: 1;
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.btn.is-primary:hover {
+  background: color-mix(in srgb, var(--ink) 88%, var(--bg));
+}
+
+.btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+@keyframes ui-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (min-width: 768px) {
+  .tool-tip {
+    bottom: auto;
+    top: 50%;
+    left: calc(100% + 16px);
+    translate: 0 -50%;
+  }
+
+  .tool-tip::before {
+    left: -6px;
+    top: 50%;
+    bottom: auto;
+    border-width: 0 0 1px 1px;
+    translate: 0 -50%;
+  }
+
+  @keyframes tip-in {
+    from {
+      opacity: 0;
+      transform: translateX(-6px);
+    }
+  }
+
+  .hint-panel {
+    align-self: start;
+    justify-self: end;
+    width: 340px;
+    margin: 8px 12px 0 0;
+    --panel-from: -6px;
+  }
+
+  .completion {
+    grid-area: canvas;
+    justify-self: center;
+    width: min(440px, calc(100% - 48px));
+    margin-bottom: 24px;
+    padding: 22px 22px 18px;
+    border: 1px solid var(--grid);
+    border-radius: 18px;
+    box-shadow:
+      0 18px 48px rgb(0 0 0 / 14%),
+      0 2px 6px rgb(0 0 0 / 6%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .hint-more,
+  .hint-step {
+    transition-duration: 80ms;
+  }
+
+  .hint-panel,
+  .hint-tier,
+  .tool-tip {
+    animation: ui-fade-in 80ms linear both;
+  }
+
+  .completion {
+    animation: ui-fade-in 80ms linear var(--card-delay) both;
+  }
+
+  .star-fill {
+    animation-name: ui-fade-in;
+    animation-duration: 80ms;
+    animation-timing-function: linear;
+  }
+
+  .completion-unlock {
+    animation-duration: 80ms;
+  }
+
+  .tool-btn.is-revealing {
+    animation: ui-fade-in 80ms linear both;
+  }
+
+  .tool-btn.is-revealing::after,
+  .has-tip .tool-btn.is-revealing::after {
+    animation: ui-fade-in 80ms linear both;
+  }
+}

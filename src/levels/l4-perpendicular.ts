@@ -23,6 +23,7 @@ export const perpendicular: Level = {
   ...frame([A, P, { x: 0.3, y: 1.6 }, { x: 0.3, y: -1.2 }]),
   targets: { L: 2, E: 4 },
   tools: ['point', 'line', 'circle', 'perp-bisector'],
+  tip: 'New tool: drag between two points to draw their perpendicular bisector.',
   goal: (s) => {
     const p = pos(s, 'P');
     const ell = lineValue(s, 'ell');

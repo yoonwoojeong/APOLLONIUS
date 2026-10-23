@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { STORAGE_KEY } from '../../../src/state/persistence';
 import { createStore, type Store } from '../../../src/state/store';
 import { GameScreen } from '../../../src/ui/GameScreen';
+import { levelById } from '../../../src/levels';
+import { playReferenceInto } from '../helpers';
 
 const storageWith = (data: unknown): Storage => {
   const m = new Map<string, string>([[STORAGE_KEY, JSON.stringify(data)]]);
@@ -171,5 +173,103 @@ describe('GameScreen', () => {
     act(() => render(null, host));
     key({ key: '2' });
     expect(store.tool.value).toBe('circle');
+  });
+});
+
+describe('GameScreen hints, completion and reveal', () => {
+  const buttonText = (host: HTMLElement, text: string) =>
+    [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === text) ?? null;
+  const panel = (host: HTMLElement) => host.querySelector('[role="dialog"][aria-label="Hint"]');
+
+  it('Hint opens tier 1; More help advances; close keeps the tier and refocuses Hint', () => {
+    const store = createStore(null);
+    store.openLevel('equilateral');
+    const host = mount(store);
+    expect(panel(host)).toBeNull();
+    act(() => button(host, 'Hint')!.click());
+    expect(store.hintTier.value).toBe(1);
+    expect(panel(host)!.textContent).toContain('Which points are exactly AB away from A?');
+    act(() => buttonText(host, 'More help')!.click());
+    expect(store.hintTier.value).toBe(2);
+    expect(host.querySelectorAll('.hint-glow [data-hint-id]')).toHaveLength(0); // no viewport in jsdom
+    act(() => button(host, 'Close hint')!.click());
+    expect(panel(host)).toBeNull();
+    expect(document.activeElement).toBe(button(host, 'Hint'));
+    act(() => button(host, 'Hint')!.click());
+    expect(store.hintTier.value).toBe(2);
+    expect(panel(host)!.textContent).toContain('Show me where');
+  });
+
+  it('closes the panel when the hint moves on to a new step', () => {
+    const store = createStore(null);
+    store.openLevel('equilateral');
+    const host = mount(store);
+    act(() => button(host, 'Hint')!.click());
+    act(() => {
+      store.apply({ type: 'add', objects: levelById('equilateral').reference[0]!.objects });
+    });
+    expect(store.hintTier.value).toBe(0);
+    expect(panel(host)).toBeNull();
+  });
+
+  it('completing a level closes the hint and shows the card; Next opens level 2', () => {
+    const store = createStore(null);
+    store.openLevel('equilateral');
+    const host = mount(store);
+    act(() => button(host, 'Hint')!.click());
+    act(() => playReferenceInto(store));
+    expect(panel(host)).toBeNull();
+    const card = host.querySelector('[role="dialog"].completion')!;
+    expect(card.textContent).toContain('Solved');
+    expect(card.querySelectorAll('[data-earned="true"]')).toHaveLength(3);
+    act(() => buttonText(host, 'Next')!.click());
+    expect(store.levelId.value).toBe('perp-bisector');
+    expect(host.querySelector('.completion')).toBeNull();
+  });
+
+  it('Replay reopens the same level', () => {
+    const store = createStore(null);
+    store.openLevel('equilateral');
+    const host = mount(store);
+    act(() => playReferenceInto(store));
+    act(() => buttonText(host, 'Replay')!.click());
+    expect(store.levelId.value).toBe('equilateral');
+    expect(store.completion.value).toBeNull();
+    expect(counter(host)).toBe('L 0/4 · E 0/4');
+  });
+
+  it('reveals the new tool once per session with its tip; tapping dismisses it', () => {
+    const store = createStore(
+      storageWith({ version: 1, levels: {}, unlockedTools: ['perp-bisector'] }),
+    );
+    store.openLevel('perpendicular');
+    const host = mount(store);
+    const tool = button(host, 'Perpendicular bisector')!;
+    expect(tool.classList.contains('is-revealing')).toBe(true);
+    const tip = host.querySelector('.tool-tip')!;
+    expect(tip.textContent).toContain(
+      'New tool: drag between two points to draw their perpendicular bisector.',
+    );
+    act(() => (tip as HTMLElement).click());
+    expect(host.querySelector('.tool-tip')).toBeNull();
+    act(() => store.openLevel('perpendicular'));
+    expect(button(host, 'Perpendicular bisector')!.classList.contains('is-revealing')).toBe(false);
+    expect(host.querySelector('.tool-tip')).toBeNull();
+  });
+
+  it('the tip is dismissed by the first use of the tool', () => {
+    const store = createStore(
+      storageWith({ version: 1, levels: {}, unlockedTools: ['perp-bisector'] }),
+    );
+    store.openLevel('perpendicular');
+    const host = mount(store);
+    expect(host.querySelector('.tool-tip')).not.toBeNull();
+    act(() => {
+      store.apply({
+        type: 'add',
+        objects: [{ id: 'b1', def: { type: 'perp-bisector', a: 'A', b: 'P' } }],
+      });
+    });
+    expect(host.querySelector('.tool-tip')).toBeNull();
   });
 });

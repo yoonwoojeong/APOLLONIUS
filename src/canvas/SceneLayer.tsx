@@ -4,7 +4,7 @@ import type { Curve } from '../geometry/curves';
 import type { Vec } from '../geometry/vec';
 import type { GoalMatch, ToolId } from '../levels/types';
 import { candidateIntersections, isCurveValue, isPointValue, type Candidate } from './candidates';
-import { curveShapes, ghostShapes, objectShapes, type Shape } from './shapes';
+import { curveShapes, curveToScreen, ghostShapes, objectShapes, type Shape } from './shapes';
 import type { SnapTarget } from './snap';
 import { toScreen, type Viewport } from './viewport';
 
@@ -35,7 +35,10 @@ interface Props {
   /** Changes whenever the gesture locks onto a new target, replaying the lock pulse. */
   lockKey?: number;
   goldMatch?: GoalMatch | null;
+  /** Hint tier 2: inputs of the hinted step, glowing in a halo layer under the scene. */
   hintIds?: ObjId[];
+  /** Hint tier 3: the hinted step's result, drawn as a dashed gold ghost to trace. */
+  hintGhost?: (Vec | Curve)[];
   animating?: Animating | null;
   onRetainedEnd?: (id: ObjId) => void;
   /** An object in `animating.drawIn` finished drawing on; drop it so pan/zoom never replays it. */
@@ -51,6 +54,8 @@ export const SETTLE_MS = 600;
 const CANDIDATE_R = 3;
 const HIT_R = 14;
 const SNAP_SCALE = 1.4;
+/** Shimmer lifetime fallback (CSS delay + duration, plus slack); animationend normally ends it. */
+const SHIMMER_MS = 1400;
 
 function ShapeEls({ shapes, cls }: { shapes: Shape[]; cls: string }) {
   return (
@@ -194,6 +199,127 @@ function GoldLayer({ match, view }: { match: GoalMatch; view: Viewport }) {
   );
 }
 
+/** Plain shapes without `pathLength`, so pixel dash patterns keep their length. */
+function DashedShapes({ shapes, cls }: { shapes: Shape[]; cls: string }) {
+  return (
+    <>
+      {shapes.map((s) =>
+        s.tag === 'line' ? (
+          <line key={s.key} class={cls} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} />
+        ) : (
+          <path key={s.key} class={cls} d={s.d} />
+        ),
+      )}
+    </>
+  );
+}
+
+/**
+ * Soft pulsing halos under the hinted inputs. They live outside the object groups so their
+ * animation never reaches a curve/point's draw-on `animationend` handler.
+ */
+function HintGlow({
+  objects,
+  scene,
+  view,
+}: {
+  objects: SceneObject[];
+  scene: Scene;
+  view: Viewport;
+}) {
+  return (
+    <g class="hint-glow" aria-hidden="true">
+      {objects.map((o) =>
+        isPointValue(o.value) ? (
+          <circle
+            key={o.id}
+            data-hint-id={o.id}
+            class="hint-halo-dot"
+            cx={toScreen(view, o.value).x}
+            cy={toScreen(view, o.value).y}
+            r={POINT_R * 3}
+          />
+        ) : (
+          <g key={o.id} data-hint-id={o.id}>
+            <ShapeEls shapes={objectShapes(o, scene, view)} cls="hint-halo-stroke" />
+          </g>
+        ),
+      )}
+    </g>
+  );
+}
+
+/** The hinted step's result as a dashed gold preview; one element per ghost value. */
+function HintGhost({ values, view }: { values: (Vec | Curve)[]; view: Viewport }) {
+  return (
+    <g class="hint-ghosts" aria-hidden="true">
+      {values.map((g, i) => {
+        if (isCurveValue(g)) {
+          return (
+            <g key={i} data-kind="hint-ghost" class="hint-ghost">
+              <DashedShapes shapes={curveShapes(g, view)} cls="hint-ghost-stroke" />
+            </g>
+          );
+        }
+        const p = toScreen(view, g);
+        return (
+          <g key={i} data-kind="hint-ghost" class="hint-ghost">
+            <circle class="hint-ghost-ring" cx={p.x} cy={p.y} r={POINT_R * 2.25} />
+            <circle class="hint-ghost-dot" cx={p.x} cy={p.y} r={POINT_R * 0.6} />
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+/** Screen-space centre of the gold result: points, circle centres, lines nearest the view centre. */
+function goldCentre(gold: (Vec | Curve)[], view: Viewport): { c: Vec; r: number } {
+  const mid = { x: view.width / 2, y: view.height / 2 };
+  const anchors = gold.map((g): { p: Vec; r: number } => {
+    if (!isCurveValue(g)) return { p: toScreen(view, g), r: 0 };
+    const s = curveToScreen(g, view);
+    if (s.kind === 'circle') return { p: s.c, r: s.r };
+    const t = (mid.x - s.p.x) * s.d.x + (mid.y - s.p.y) * s.d.y;
+    return { p: { x: s.p.x + s.d.x * t, y: s.p.y + s.d.y * t }, r: 0 };
+  });
+  const n = Math.max(anchors.length, 1);
+  const c = anchors.reduce((acc, a) => ({ x: acc.x + a.p.x / n, y: acc.y + a.p.y / n }), {
+    x: 0,
+    y: 0,
+  });
+  const r = Math.min(Math.max(140, ...anchors.map((a) => a.r * 1.35)), 320);
+  return { c, r };
+}
+
+/**
+ * A soft radial ring of gold light that blooms once after the gold draw-on. Purely
+ * decorative (aria-hidden, `.no-shimmer` hides it under reduced motion); it sits outside
+ * the gold layer so its animationend cannot end the draw-on early.
+ */
+function Shimmer({ match, view }: { match: GoalMatch; view: Viewport }) {
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    const t = window.setTimeout(() => setOn(false), SHIMMER_MS);
+    return () => window.clearTimeout(t);
+  }, []);
+  if (!on) return null;
+  const { c, r } = goldCentre(match.gold, view);
+  return (
+    <g class="shimmer-layer" aria-hidden="true" onAnimationEnd={() => setOn(false)}>
+      <defs>
+        <radialGradient id="apollonius-shimmer">
+          <stop offset="0%" class="shimmer-stop" stop-opacity="0" />
+          <stop offset="55%" class="shimmer-stop" stop-opacity="0.08" />
+          <stop offset="82%" class="shimmer-stop" stop-opacity="0.32" />
+          <stop offset="100%" class="shimmer-stop" stop-opacity="0" />
+        </radialGradient>
+      </defs>
+      <circle class="shimmer no-shimmer" cx={c.x} cy={c.y} r={r} fill="url(#apollonius-shimmer)" />
+    </g>
+  );
+}
+
 /** Renders the scene in screen space: curves, candidates, ghost, points, snap, overlays. */
 export function SceneLayer(props: Props) {
   const { scene, view, ghost, snap, animating, highlight, goldMatch } = props;
@@ -222,8 +348,13 @@ export function SceneLayer(props: Props) {
     : [];
   const pulsed = (highlight?.ids ?? []).flatMap((id) => scene.byId.get(id) ?? []);
 
+  const glowing = scene.objects.filter((o) => hint.has(o.id) && o.value);
+  const hintGhost = props.hintGhost ?? [];
+
   return (
     <g class="scene">
+      {goldMatch && <Shimmer match={goldMatch} view={view} />}
+      {glowing.length > 0 && <HintGlow objects={glowing} scene={scene} view={view} />}
       <g class="curves">
         {curves.map((o) => (
           <CurveEl
@@ -255,6 +386,7 @@ export function SceneLayer(props: Props) {
           </g>
         ))}
       </g>
+      {hintGhost.length > 0 && <HintGhost values={hintGhost} view={view} />}
       {goldMatch && <GoldLayer match={goldMatch} view={view} />}
       <g class="candidates">
         {candidates.map((c) => {

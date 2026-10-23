@@ -2,6 +2,7 @@ import type { JSX } from 'preact';
 import type { ToolId } from '../levels/types';
 import {
   CircleIcon,
+  CloseIcon,
   LineIcon,
   PerpBisectorIcon,
   PointIcon,
@@ -27,6 +28,11 @@ interface Props {
   onUndo: () => void;
   onRedo: () => void;
   onReset: () => void;
+  /** A newly available tool: its button scales in with a gold ring. */
+  reveal?: ToolId | null;
+  /** One-time inline tip shown next to the revealed tool; tapping it dismisses it. */
+  tip?: string | null;
+  onTipDismiss?: () => void;
 }
 
 /** Tool buttons (with 1–4 key hints) and the undo/redo/reset group. */
@@ -37,21 +43,30 @@ export function ToolPalette(p: Props) {
         {p.tools.map((t, i) => {
           const { name, Icon } = TOOLS[t];
           return (
-            <button
-              key={t}
-              type="button"
-              class="tool-btn"
-              aria-label={name}
-              aria-pressed={t === p.active}
-              aria-keyshortcuts={String(i + 1)}
-              title={`${name} (${i + 1})`}
-              onClick={() => p.onSelect(t)}
-            >
-              <Icon />
-              <span class="key-hint" aria-hidden="true">
-                {i + 1}
-              </span>
-            </button>
+            <div key={t} class={t === p.reveal && p.tip ? 'tool-slot has-tip' : 'tool-slot'}>
+              <button
+                type="button"
+                class={t === p.reveal ? 'tool-btn is-revealing' : 'tool-btn'}
+                aria-label={name}
+                aria-pressed={t === p.active}
+                aria-keyshortcuts={String(i + 1)}
+                title={`${name} (${i + 1})`}
+                onClick={() => p.onSelect(t)}
+              >
+                <Icon />
+                <span class="key-hint" aria-hidden="true">
+                  {i + 1}
+                </span>
+              </button>
+              {t === p.reveal && p.tip && (
+                <div class="tool-tip" role="status" onClick={p.onTipDismiss}>
+                  <span class="tool-tip-text">{p.tip}</span>
+                  <button type="button" class="tool-tip-close" aria-label="Dismiss tip">
+                    <CloseIcon />
+                  </button>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>

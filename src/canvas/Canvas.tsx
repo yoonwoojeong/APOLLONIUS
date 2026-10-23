@@ -64,6 +64,11 @@ export function Canvas({ store }: { store: Store }) {
   const scene = construction.scene();
   const candidates = useMemo(() => candidateIntersections(scene), [scene]);
   const goldMatch = store.completion.value?.match ?? null;
+  // Hint visuals follow the tier (not the panel), so the player can close it and trace.
+  const hint = goldMatch ? null : store.hint.value;
+  const hintTier = store.hintTier.value;
+  const hintIds = hint && hintTier >= 2 ? hint.inputIds : undefined;
+  const hintGhost = hint && hintTier >= 3 ? hint.ghost : undefined;
 
   const svgRef = useRef<SVGSVGElement>(null);
   const view = useViewport(level.view, construction, svgRef);
@@ -397,6 +402,8 @@ export function Canvas({ store }: { store: Store }) {
               snap={snap}
               lockKey={lockKey}
               goldMatch={goldMatch}
+              hintIds={hintIds}
+              hintGhost={hintGhost}
               animating={animating}
               onRetainedEnd={retainedEnd}
               onDrawnIn={drawnIn}

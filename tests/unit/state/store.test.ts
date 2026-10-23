@@ -1,7 +1,12 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { LEVELS } from '../../../src/levels';
 import { createStore } from '../../../src/state/store';
 import { STORAGE_KEY } from '../../../src/state/persistence';
+import type { Level } from '../../../src/levels/types';
+import { toLevel } from '../../../src/problems/load';
+import { validate } from '../../../src/problems/validate';
+import type { Stars } from '../../../src/reasoning/stars';
+import perpBisectorFixture from '../../fixtures/problems/valid-perp-bisector.json';
 import { playReferenceInto } from '../helpers';
 
 const memStorage = () => {
@@ -228,4 +233,111 @@ test('a second completion in one visit reports the unlock only once', () => {
   expect(s.completion.value).not.toBeNull();
   expect(s.completion.value?.unlocked).toBeUndefined();
   expect(s.progress.value.unlockedTools.filter((t) => t === 'perp-bisector')).toHaveLength(1);
+});
+
+/** The perp-bisector fixture as a custom level that also allows the Perpendicular Bisector tool. */
+const customLevel = (): Level => {
+  const r = validate(structuredClone(perpBisectorFixture));
+  if (!r.ok) throw new Error(JSON.stringify(r.errors));
+  return toLevel({ ...r.problem, tools: [...r.problem.tools, 'perp-bisector'] }, 'problem:pb');
+};
+
+test('custom level: authored tools, onComplete with stars, progress and storage untouched', () => {
+  const { storage, m } = memStorage();
+  const s = createStore(storage);
+  const before = structuredClone(s.progress.value);
+  const stored = new Map(m);
+  const onComplete = vi.fn<(stars: Stars) => void>();
+  const onExit = vi.fn();
+  const level = customLevel();
+  s.openCustomLevel(level, { onComplete, onExit });
+  expect(s.screen.value).toBe('level');
+  expect(s.currentLevel.value).toBe(level);
+  expect(s.levelId.value).toBe('problem:pb');
+  expect(s.isCustom.value).toBe(true);
+  expect(s.availableTools()).toContain('perp-bisector');
+  s.requestHint();
+  playReferenceInto(s);
+  expect(s.completion.value).not.toBeNull();
+  expect(s.completion.value?.unlocked).toBeUndefined();
+  expect(s.completion.value?.explanation).toBe(perpBisectorFixture.explain);
+  expect(onComplete).toHaveBeenCalledTimes(1);
+  expect(onComplete).toHaveBeenCalledWith([true, true, true]);
+  expect(s.progress.value).toEqual(before);
+  expect(m).toEqual(stored);
+  s.exitCustomLevel();
+  expect(onExit).toHaveBeenCalledTimes(1);
+});
+
+test('custom level in sandbox mode never completes', () => {
+  const s = createStore(null);
+  const onComplete = vi.fn();
+  s.openCustomLevel(customLevel(), { onComplete, onExit: () => {}, sandbox: true });
+  playReferenceInto(s);
+  expect(s.currentLevel.value.goal(s.construction().scene())).not.toBeNull();
+  expect(s.completion.value).toBeNull();
+  expect(onComplete).not.toHaveBeenCalled();
+});
+
+test('replayLevel is a no-op on a sandbox', () => {
+  const s = createStore(null);
+  s.openCustomLevel(customLevel(), { onExit: () => {}, sandbox: true });
+  playReferenceInto(s);
+  s.screen.value = 'editor';
+  s.replayLevel();
+  expect(s.construction().steps()).toHaveLength(customLevel().reference.length);
+  expect(s.screen.value).toBe('editor');
+});
+
+test('closeCustomLevel drops the custom level without calling onExit', () => {
+  const s = createStore(null);
+  const onExit = vi.fn();
+  s.openCustomLevel(customLevel(), { onExit, sandbox: true });
+  playReferenceInto(s);
+  s.closeCustomLevel('editor');
+  expect(onExit).not.toHaveBeenCalled();
+  expect(s.isCustom.value).toBe(false);
+  expect(s.screen.value).toBe('editor');
+  expect(s.construction().steps()).toEqual([]);
+  s.undo();
+  expect(s.construction().steps()).toEqual([]);
+  s.exitCustomLevel();
+  expect(onExit).not.toHaveBeenCalled();
+});
+
+test('replayLevel reopens a custom level with the same options', () => {
+  const s = createStore(null);
+  const onComplete = vi.fn();
+  s.openCustomLevel(customLevel(), { onComplete, onExit: () => {} });
+  playReferenceInto(s);
+  s.replayLevel();
+  expect(s.completion.value).toBeNull();
+  expect(s.isCustom.value).toBe(true);
+  expect(s.construction().steps()).toEqual([]);
+  playReferenceInto(s);
+  expect(onComplete).toHaveBeenCalledTimes(2);
+});
+
+test('openLevel after a custom level restores normal behaviour', () => {
+  const { storage, m } = memStorage();
+  const s = createStore(storage);
+  const onComplete = vi.fn();
+  s.openCustomLevel(customLevel(), { onComplete, onExit: () => {} });
+  s.openLevel('equilateral');
+  expect(s.isCustom.value).toBe(false);
+  expect(s.levelId.value).toBe('equilateral');
+  expect(s.availableTools()).not.toContain('perp-bisector');
+  playReferenceInto(s);
+  expect(onComplete).not.toHaveBeenCalled();
+  expect(s.progress.value.levels.equilateral?.stars[0]).toBe(true);
+  expect(m.get(STORAGE_KEY)).toBeDefined();
+});
+
+test('closeCustomLevel resets the tool', () => {
+  const s = createStore(null);
+  s.openCustomLevel(customLevel(), { onExit: () => {}, sandbox: true });
+  s.selectTool('perp-bisector');
+  expect(s.tool.value).toBe('perp-bisector');
+  s.closeCustomLevel('editor');
+  expect(s.tool.value).toBe('point');
 });

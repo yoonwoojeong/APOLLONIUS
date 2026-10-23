@@ -3,13 +3,13 @@ import { bisectedPairs, labelOf } from '../reasoning/facts';
 import { onCurve } from '../geometry/curves';
 import { dot } from '../geometry/vec';
 import { isCurve, lineValue, pos } from './goals';
-import type { Level } from './types';
+import type { BuiltInLevel } from './types';
 import { frame } from './view';
 
 const A = { x: -1.5, y: 0.2 };
 const P = { x: 0.3, y: 0.5 };
 
-export const perpendicular: Level = {
+export const perpendicular: BuiltInLevel = {
   id: 'perpendicular',
   number: 4,
   title: 'Perpendicular at a Point',

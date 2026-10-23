@@ -1,16 +1,18 @@
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
-import type { Level, LevelId } from '../levels/types';
+import type { BuiltInLevel, LevelId } from '../levels/types';
 import type { Progress } from '../state/persistence';
-import { STAR_PATH } from './icons';
+import { CreateIcon, STAR_PATH } from './icons';
 import './screens.css';
 
 interface Props {
-  levels: Level[];
+  levels: BuiltInLevel[];
   progress: Progress;
   isUnlocked: (id: LevelId) => boolean;
   /** The level Continue would open; its node is subtly emphasised and the inked arc ends there. */
   current: LevelId;
   onOpen: (id: LevelId) => void;
+  /** Opens My problems (the secondary Create entry). */
+  onCreate?: () => void;
 }
 
 type Vec = { x: number; y: number };
@@ -93,7 +95,7 @@ const pct = (v: number, of: number): string => `${f((v / of) * 100)}%`;
  * The level map (§6): six nodes on one circular arc, drawn on like a construction. The arc
  * is inked from the first node to the current one; the rest stays a ghost.
  */
-export function LevelMap({ levels, progress, isUnlocked, current, onOpen }: Props) {
+export function LevelMap({ levels, progress, isUnlocked, current, onOpen, onCreate }: Props) {
   const n = levels.length;
   const done = Math.max(
     0,
@@ -135,6 +137,12 @@ export function LevelMap({ levels, progress, isUnlocked, current, onOpen }: Prop
         <p class="map-summary">
           {solved} of {n} solved · {starCount} of {3 * n} stars
         </p>
+        {onCreate && (
+          <button type="button" class="btn map-create" onClick={onCreate}>
+            <CreateIcon />
+            Create
+          </button>
+        )}
       </header>
       <div class="map-stage" ref={stage}>
         <ArcLayer arc={WIDE} n={n} done={done} cls="is-wide" />

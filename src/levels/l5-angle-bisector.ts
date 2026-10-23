@@ -3,14 +3,14 @@ import { bisectedPairs, labelOf } from '../reasoning/facts';
 import { lineThrough } from '../geometry/curves';
 import { add, normalize, sub } from '../geometry/vec';
 import { findCurveEq, pos } from './goals';
-import type { Level } from './types';
+import type { BuiltInLevel } from './types';
 import { frame } from './view';
 
 const V = { x: -1.5, y: 0 };
 const A = { x: 1.5, y: 1.2 };
 const B = { x: 0.6, y: -0.8 };
 
-export const angleBisector: Level = {
+export const angleBisector: BuiltInLevel = {
   id: 'angle-bisector',
   number: 5,
   title: 'Angle Bisector',

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { dist, sub, type Vec } from '../geometry/vec';
-import { levelById } from '../levels';
 import type { ObjId, Scene } from '../construction/types';
 import type { ToolId } from '../levels/types';
 import type { Store } from '../state/store';
@@ -42,15 +41,15 @@ const isEndpoint = (t: SnapTarget | null): boolean =>
   !!t && (t.kind === 'point' || t.kind === 'candidate');
 
 /** Text entry keeps its own keys (Space, Esc); buttons do not count. */
-const isTextEntry = (t: EventTarget | null): boolean =>
+export const isTextEntry = (t: EventTarget | null): boolean =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 
 /** Focus on a control (e.g. the tool button just clicked) rather than on the page or canvas. */
-const isControl = (t: EventTarget | null): boolean =>
+export const isControl = (t: EventTarget | null): boolean =>
   t instanceof HTMLElement && t !== document.body && !(t instanceof SVGElement);
 
 /** The point or crossing a keyboard stop on the canvas stands for. */
-function stopTarget(
+export function stopTarget(
   el: EventTarget | null,
   scene: Scene,
   candidates: Candidate[],
@@ -86,7 +85,7 @@ interface Props {
 export function Canvas({ store, coach, onView }: Props) {
   const tool = store.tool.value;
   const revision = store.revision.value; // re-render on every construction change
-  const level = levelById(store.levelId.value);
+  const level = store.currentLevel.value;
   const construction = store.construction();
   const scene = construction.scene();
   const candidates = useMemo(() => candidateIntersections(scene), [scene]);

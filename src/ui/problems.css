@@ -1,0 +1,528 @@
+/*
+ * My problems: the author's drafts. Colours come from tokens only; buttons (.btn, .icon-btn)
+ * and the draw-on (.draw-in, .pop-in) are shared with the game.
+ */
+
+.pb {
+  display: grid;
+  align-content: start;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 10px 16px calc(96px + env(safe-area-inset-bottom));
+}
+
+.pb-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  /* Room for the theme toggle in the corner. */
+  padding-right: 48px;
+  animation: screen-in var(--t-ui) var(--ease-out) both;
+}
+
+.pb-back {
+  margin-left: -8px;
+}
+
+.pb-head-text {
+  min-width: 0;
+}
+
+.pb-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 450;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.pb-summary {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pb-save-warn {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--invalid) 45%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--invalid) 9%, var(--surface));
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.pb-save-warn:empty {
+  display: none;
+}
+
+.pb-body {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+  margin-top: 18px;
+}
+
+.pb-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.pb-actions .btn.is-primary {
+  flex: 1 1 auto;
+}
+
+.pb-actions .btn:not(.is-primary) {
+  background: var(--surface);
+}
+
+/* The list */
+
+.pb-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pb-card {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 10px 10px 16px;
+  border: 1px solid var(--grid);
+  border-radius: 16px;
+  background: var(--surface);
+  animation: screen-in var(--t-ui) var(--ease-out) both;
+}
+
+.pb-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  padding-right: 6px;
+}
+
+.pb-card-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 450;
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pb-card-title.is-untitled {
+  font-style: italic;
+  color: var(--muted);
+}
+
+.pb-stars {
+  display: flex;
+  flex: none;
+  gap: 3px;
+}
+
+.pb-star {
+  width: 14px;
+  height: 14px;
+}
+
+.pb-star path {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+}
+
+.pb-star[data-earned='true'] path {
+  fill: var(--gold);
+  stroke: var(--gold);
+}
+
+.pb-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding-right: 6px;
+  font-size: 13.5px;
+}
+
+.pb-status {
+  flex: none;
+  padding: 2px 9px;
+  border: 1px solid var(--ink-ghost);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+}
+
+.pb-status[data-status='valid'] {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.pb-status[data-status='tested'] {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--gold) 22%, transparent);
+  color: var(--ink);
+}
+
+.pb-goal {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pb-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.pb-card-actions .btn {
+  padding: 0 14px;
+}
+
+.pb-play svg {
+  width: 16px;
+  height: 16px;
+  margin-left: -2px;
+}
+
+.pb-play svg path {
+  fill: currentColor;
+}
+
+.pb-card-tools {
+  display: flex;
+  margin-left: auto;
+}
+
+.pb-icon.is-danger:hover:not(:disabled) {
+  color: var(--invalid);
+  background: color-mix(in srgb, var(--invalid) 10%, transparent);
+}
+
+/* Empty */
+
+.pb-empty {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  max-width: 420px;
+  margin: 6vh auto 0;
+  text-align: center;
+  animation: screen-in var(--t-ui) var(--ease-out) 80ms both;
+}
+
+.pb-empty-figure {
+  width: 160px;
+  height: auto;
+  margin-bottom: 10px;
+  overflow: visible;
+}
+
+.pb-fig-ghost {
+  fill: none;
+  stroke: var(--ink-ghost);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 5;
+  stroke-linecap: round;
+}
+
+.pb-fig-circle {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+.pb-fig-point {
+  fill: var(--ink);
+}
+
+.pb-empty .pop-in {
+  animation-delay: calc(var(--t-draw) - 40ms);
+}
+
+.pb-empty-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 450;
+  line-height: 1.25;
+}
+
+.pb-empty-text {
+  max-width: 34ch;
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.45;
+  text-wrap: pretty;
+}
+
+.pb-empty .pb-actions {
+  justify-self: stretch;
+}
+
+.pb-note {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13.5px;
+  text-align: center;
+}
+
+/* Under the list, the note lines up with the cards (centred only under the empty state). */
+.pb-list ~ .pb-note {
+  text-align: start;
+}
+
+/* Toast */
+
+.pb-toast-region {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  pointer-events: none;
+}
+
+.pb-toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(100%, 440px);
+  min-height: 52px;
+  padding: 4px 4px 4px 16px;
+  border-radius: 14px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 14.5px;
+  box-shadow: 0 10px 28px rgb(0 0 0 / 22%);
+  pointer-events: auto;
+  animation: toast-in var(--t-ui) var(--ease-out) both;
+}
+
+.pb-toast-text {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.btn.pb-toast-action {
+  flex: none;
+  border-color: transparent;
+  color: var(--bg);
+  font-weight: 650;
+}
+
+.btn.pb-toast-action:hover {
+  background: color-mix(in srgb, var(--bg) 14%, transparent);
+}
+
+.btn.pb-toast-action:focus-visible {
+  outline-color: var(--bg);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    translate: 0 10px;
+  }
+}
+
+/* Dialog */
+
+.pb-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: color-mix(in srgb, var(--bg) 55%, rgb(0 0 0 / 35%));
+  animation: ui-fade-in var(--t-ui) var(--ease-out) both;
+}
+
+.pb-dialog {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 440px);
+  max-height: min(560px, calc(100dvh - 32px));
+  padding: 20px 20px 16px;
+  border: 1px solid var(--grid);
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 24%);
+  animation: screen-in var(--t-ui) var(--ease-out) both;
+}
+
+.pb-dialog-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 450;
+  line-height: 1.25;
+}
+
+.pb-dialog-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+
+.pb-file {
+  color: var(--ink);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.pb-dialog-body {
+  min-height: 0;
+  overflow: auto;
+  border-radius: 8px;
+}
+
+.pb-errors {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+
+.pb-errors li {
+  position: relative;
+  padding-left: 18px;
+}
+
+.pb-errors li::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0.55em;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--invalid);
+  border-radius: 50%;
+}
+
+.pb-err-path {
+  display: block;
+  margin-bottom: 1px;
+  color: var(--muted);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.pb-errors-more {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.pb-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.pb-dialog-actions .btn.is-primary {
+  flex: none;
+  min-width: 96px;
+}
+
+/* Wider screens: a centred column, cards in a grid. */
+@media (min-width: 768px) {
+  .pb {
+    justify-items: center;
+    padding: 14px 40px 104px;
+  }
+
+  .pb-head,
+  .pb-save-warn,
+  .pb-body {
+    width: 100%;
+    max-width: 1040px;
+  }
+
+  .pb-head {
+    padding-right: 56px;
+  }
+
+  .pb-title {
+    font-size: 30px;
+  }
+
+  .pb-body {
+    margin-top: 24px;
+  }
+
+  .pb-body > .pb-actions {
+    justify-content: flex-start;
+  }
+
+  .pb-body > .pb-actions .btn.is-primary {
+    flex: none;
+  }
+
+  .pb-list {
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 14px;
+  }
+
+  .pb-note {
+    margin-top: 12px;
+  }
+
+  .pb-toast-region {
+    bottom: 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pb-head,
+  .pb-card,
+  .pb-empty,
+  .pb-toast,
+  .pb-dialog {
+    animation: ui-fade-in 80ms linear both;
+  }
+
+  .pb-empty .pop-in {
+    animation-delay: 0ms;
+  }
+}

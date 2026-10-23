@@ -1,0 +1,39 @@
+{
+  "format": "apollonius-problem",
+  "version": 1,
+  "title": "Equilateral Triangle",
+  "goalText": "Construct an equilateral triangle on AB.",
+  "explain": "C lies on both circles, so CA = AB = CB.",
+  "tools": ["point", "line", "circle"],
+  "givens": [
+    { "id": "A", "def": { "type": "given-point", "pos": { "x": -1, "y": 0 } } },
+    { "id": "B", "def": { "type": "given-point", "pos": { "x": 1, "y": 0 } } },
+    { "id": "AB", "def": { "type": "given-line", "a": "A", "b": "B", "extent": "segment" } }
+  ],
+  "labels": { "A": "A", "B": "B" },
+  "solution": [
+    {
+      "objects": [{ "id": "r1", "def": { "type": "circle", "center": "A", "through": "B" } }],
+      "nudge": "Which points are exactly AB away from A?"
+    },
+    {
+      "objects": [{ "id": "r2", "def": { "type": "circle", "center": "B", "through": "A" } }],
+      "nudge": "…and exactly AB away from B?"
+    },
+    {
+      "objects": [
+        { "id": "r3", "def": { "type": "intersection", "a": "r1", "b": "r2", "index": 0 } }
+      ],
+      "nudge": "Where do those two sets meet?"
+    },
+    {
+      "objects": [
+        { "id": "r4", "def": { "type": "line", "a": "A", "b": "r3" } },
+        { "id": "r5", "def": { "type": "line", "a": "B", "b": "r3" } }
+      ],
+      "nudge": "Join the new point to A and B."
+    }
+  ],
+  "targets": ["r3", "r4", "r5"],
+  "par": { "L": 4, "E": 4 }
+}

@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'preact/hooks';
-import { ArrowIcon } from './icons';
+import { ArrowIcon, CreateIcon } from './icons';
 import './screens.css';
 
 interface Props {
   hasProgress: boolean;
   onStart: () => void;
+  /** Opens My problems (the secondary Create entry). */
+  onCreate?: () => void;
 }
 
 /** A shallow arc under the name: its centre lies far above, so it reads as a smile of a circle. */
@@ -13,8 +15,9 @@ const ARC = { w: 320, h: 26, x0: 8, x1: 312, y: 5, r: 760 };
 /**
  * The quiet title screen (§3.1): the name, an underline that draws on as a construction arc,
  * and one action — Begin on first launch, Continue for a returning player — which takes focus.
+ * A quieter Create below it leads to My problems.
  */
-export function TitleScreen({ hasProgress, onStart }: Props) {
+export function TitleScreen({ hasProgress, onStart, onCreate }: Props) {
   const start = useRef<HTMLButtonElement>(null);
   useEffect(() => start.current?.focus({ preventScroll: true }), []);
   return (
@@ -35,6 +38,12 @@ export function TitleScreen({ hasProgress, onStart }: Props) {
           {hasProgress ? 'Continue' : 'Begin'}
           <ArrowIcon />
         </button>
+        {onCreate && (
+          <button type="button" class="btn title-create" onClick={onCreate}>
+            <CreateIcon />
+            Create
+          </button>
+        )}
       </div>
     </main>
   );

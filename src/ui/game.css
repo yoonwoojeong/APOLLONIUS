@@ -71,6 +71,19 @@
   grid-area: map;
 }
 
+/* Without the Map/Back button (the editor's Solve): the title leads the bar. */
+.topbar.no-back {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'title actions'
+    'goal counter';
+  padding-left: 16px;
+}
+
+.topbar.no-back .topbar-goal {
+  padding-left: 0;
+}
+
 .topbar-title {
   grid-area: title;
   display: flex;
@@ -189,6 +202,23 @@
   color: inherit;
 }
 
+/* The editor's Solve: a steps panel between the canvas and the palette (right side when wide). */
+
+.game.has-side {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    'top'
+    'canvas'
+    'side'
+    'palette';
+}
+
+.game-side {
+  grid-area: side;
+  min-width: 0;
+  min-height: 0;
+}
+
 @media (max-width: 399px) {
   .topbar-title {
     font-size: 17px;
@@ -210,12 +240,30 @@
       'palette canvas';
   }
 
+  .game.has-side {
+    grid-template-columns: auto minmax(0, 1fr) minmax(300px, 340px);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      'top top top'
+      'palette canvas side';
+  }
+
   .topbar {
     grid-template-columns: auto auto minmax(0, 1fr) auto auto;
     grid-template-areas: 'map title goal counter actions';
     column-gap: 12px;
     min-height: 60px;
     padding: 8px 12px 8px 16px;
+  }
+
+  .topbar.no-back {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: 'title goal counter actions';
+    padding-left: 20px;
+  }
+
+  .topbar.no-back .topbar-goal {
+    padding-left: 16px;
   }
 
   .topbar-title {

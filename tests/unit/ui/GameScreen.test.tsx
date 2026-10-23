@@ -7,6 +7,7 @@ import { createStore, type Store } from '../../../src/state/store';
 import { COACH_FADE_MS } from '../../../src/ui/CoachMark';
 import { GameScreen } from '../../../src/ui/GameScreen';
 import { levelById } from '../../../src/levels';
+import type { Level } from '../../../src/levels/types';
 import { playReferenceInto } from '../helpers';
 
 const storageWith = (data: unknown): Storage => {
@@ -429,5 +430,68 @@ describe('GameScreen level 1 coach', () => {
     expect(coach(host)).toBeNull();
     act(() => store.openLevel('perp-bisector'));
     expect(coach(host)).toBeNull();
+  });
+});
+
+describe('GameScreen with a custom level', () => {
+  const buttonText = (host: HTMLElement, text: string) =>
+    [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === text) ?? null;
+  /** Level 1 dressed as a custom level, keeping its coach and tip to prove they never show. */
+  const custom = (): Level => ({
+    ...levelById('equilateral'),
+    id: 'problem:l1',
+    number: undefined,
+    tip: 'A tip that must not show.',
+  });
+
+  it('top bar Back exits; no number, coach or tip', () => {
+    const store = createStore(null);
+    const onExit = vi.fn();
+    store.openCustomLevel(custom(), { onExit });
+    const host = mount(store);
+    expect(button(host, 'Map')).toBeNull();
+    expect(host.querySelector('.level-num')).toBeNull();
+    expect(host.querySelector('.coach')).toBeNull();
+    expect(host.querySelector('.tool-tip')).toBeNull();
+    expect(store.tool.value).toBe('circle');
+    key({ key: '2' });
+    expect(store.tool.value).toBe('line');
+    act(() => button(host, 'Back')!.click());
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('a custom level or the sandbox with the new tool never consumes its built-in reveal', () => {
+    const store = createStore(
+      storageWith({ version: 1, levels: {}, unlockedTools: ['perp-bisector'] }),
+    );
+    const withTool: Level = { ...levelById('perpendicular'), id: 'problem:p1', number: undefined };
+    store.openCustomLevel(withTool, { onExit: vi.fn() });
+    const host = mount(store);
+    expect(button(host, 'Perpendicular bisector')!.classList.contains('is-revealing')).toBe(false);
+    act(() => store.openCustomLevel({ ...withTool }, { sandbox: true, onExit: vi.fn() }));
+    expect(button(host, 'Perpendicular bisector')!.classList.contains('is-revealing')).toBe(false);
+    act(() => store.openLevel('perpendicular'));
+    expect(button(host, 'Perpendicular bisector')!.classList.contains('is-revealing')).toBe(true);
+  });
+
+  it('completion card offers Back and Replay, not Next or Map', () => {
+    const store = createStore(null);
+    const onExit = vi.fn();
+    const onComplete = vi.fn();
+    store.openCustomLevel(custom(), { onExit, onComplete });
+    const host = mount(store);
+    act(() => playReferenceInto(store));
+    const card = host.querySelector<HTMLElement>('.completion')!;
+    expect(card.querySelectorAll('[data-earned="true"]')).toHaveLength(3);
+    expect(buttonText(card, 'Next')).toBeNull();
+    expect(buttonText(card, 'Map')).toBeNull();
+    expect(document.activeElement).toBe(buttonText(card, 'Back'));
+    act(() => buttonText(card, 'Replay')!.click());
+    expect(store.completion.value).toBeNull();
+    expect(store.isCustom.value).toBe(true);
+    act(() => playReferenceInto(store));
+    expect(onComplete).toHaveBeenCalledTimes(2);
+    act(() => buttonText(host.querySelector<HTMLElement>('.completion')!, 'Back')!.click());
+    expect(onExit).toHaveBeenCalledTimes(1);
   });
 });

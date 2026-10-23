@@ -12,6 +12,8 @@ export type LevelId =
   | 'angle-bisector'
   | 'circle-center';
 
+export type ProblemLevelId = `problem:${string}`;
+
 /** `ids` = player objects satisfying the goal; `gold` = geometry drawn in gold on completion. */
 export interface GoalMatch {
   ids: ObjId[];
@@ -41,8 +43,8 @@ export type Fact =
   | { kind: 'perp-bisector'; line: ObjId; of: [ObjId, ObjId] };
 
 export interface Level {
-  id: LevelId;
-  number: number;
+  id: LevelId | ProblemLevelId;
+  number?: number;
   title: string;
   goalText: string;
   givens: ObjSpec[];
@@ -58,3 +60,6 @@ export interface Level {
   coach?: CoachStep[];
   tip?: string;
 }
+
+/** A level shipped with the game: always numbered and keyed by a `LevelId`. */
+export type BuiltInLevel = Level & { id: LevelId; number: number };

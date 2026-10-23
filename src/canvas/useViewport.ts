@@ -18,6 +18,8 @@ export interface ViewportControl {
   /** The latest viewport, for event handlers. */
   vpRef: MutableRef<Viewport | null>;
   fitScale: number;
+  /** True once the player has panned or zoomed since the last fit. */
+  movedRef: MutableRef<boolean>;
   /** Player pan by `delta` then zoom by `factor` about `at` (screen px); keeps their view after. */
   move: (delta: Vec, at: Vec, factor: number) => void;
   /** Ease back to the fitted view and resume refitting on resize. */
@@ -137,5 +139,5 @@ export function useViewport(
     return () => svg.removeEventListener('wheel', onWheel);
   }, []);
 
-  return { hostRef, size, vp, vpRef, fitScale, move, refit };
+  return { hostRef, size, vp, vpRef, fitScale, movedRef: userMoved, move, refit };
 }

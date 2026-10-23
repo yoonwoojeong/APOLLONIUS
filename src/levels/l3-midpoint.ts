@@ -2,13 +2,13 @@ import { FALLBACK } from './explain';
 import { bisectedPairs, labelOf } from '../reasoning/facts';
 import { findPointAt, pos } from './goals';
 import { bisectorSteps } from './l2-perp-bisector';
-import type { Level } from './types';
+import type { BuiltInLevel } from './types';
 import { frame } from './view';
 
 const A = { x: -1.2, y: 0 };
 const B = { x: 1.2, y: 0 };
 
-export const midpoint: Level = {
+export const midpoint: BuiltInLevel = {
   id: 'midpoint',
   number: 3,
   title: 'Midpoint',

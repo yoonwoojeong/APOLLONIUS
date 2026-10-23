@@ -1,12 +1,13 @@
 import { useSignal, type Signal } from '@preact/signals';
+import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { Canvas } from '../canvas/Canvas';
+import { Canvas, isTextEntry } from '../canvas/Canvas';
 import { isPointValue } from '../canvas/candidates';
 import { toScreen, type Viewport } from '../canvas/viewport';
-import type { ObjDef, Scene } from '../construction/types';
+import type { ObjDef, ObjId, Scene } from '../construction/types';
 import type { Curve } from '../geometry/curves';
 import type { Vec } from '../geometry/vec';
-import { LEVELS, levelById } from '../levels';
+import { LEVELS, isBuiltInLevelId } from '../levels';
 import type { LevelId, ToolId } from '../levels/types';
 import type { Store } from '../state/store';
 import { CoachMark } from './CoachMark';
@@ -18,8 +19,7 @@ import { TopBar } from './TopBar';
 import './game.css';
 
 /** Text entry keeps its own keys; buttons do not count. */
-const isTextEntry = (t: EventTarget | null): boolean =>
-  t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+export { isTextEntry };
 
 /** Tools that arrive later and get a reveal the first time they appear in a session. */
 const REVEALABLE: ToolId[] = ['perp-bisector'];
@@ -105,13 +105,28 @@ const sessionOf = (store: Store) => {
   return s;
 };
 
+interface Props {
+  store: Store;
+  /**
+   * The editor's Solve sandbox: a panel shown beside the canvas (below it on phones) in
+   * place of the Hint button. Ignored unless the open level is a sandbox.
+   */
+  sidePanel?: ComponentChildren;
+  /** Sandbox only: objects that glow on the canvas (the editor's targets). */
+  marked?: ObjId[];
+}
+
 /**
  * The level screen: top bar, tool palette and canvas, plus the tool/history shortcuts.
  * Esc (gesture cancel) and Space+drag (pan) are handled by the Canvas itself.
  */
-export function GameScreen({ store }: { store: Store }) {
+export function GameScreen({ store, sidePanel, marked }: Props) {
   void store.revision.value; // re-render on every construction change
-  const level = levelById(store.levelId.value);
+  const level = store.currentLevel.value;
+  const custom = store.isCustom.value;
+  const sandbox = store.isSandbox.value;
+  // Only built-in levels have tips and the tutorial coach; custom levels get neither.
+  const builtInId = !custom && isBuiltInLevelId(level.id) ? level.id : null;
   const construction = store.construction();
   const tools = store.availableTools();
   const completion = store.completion.value;
@@ -123,21 +138,28 @@ export function GameScreen({ store }: { store: Store }) {
   const showHint = hintOpen && tier > 0 && !!hint && !completion;
   const [reveal, setReveal] = useState<ToolId | null>(null);
   const [tip, setTip] = useState<string | null>(null);
-  const tipCfg = TIPS[level.id];
+  const tipCfg = builtInId ? TIPS[builtInId] : undefined;
 
   // Each opened level (a new construction) starts on the circle tool when it has one.
   useLayoutEffect(() => {
     const available = store.availableTools();
     const session = sessionOf(store);
     setHintOpen(false);
-    // A later tool appearing for the first time this session scales in.
-    const fresh = REVEALABLE.find((x) => available.includes(x) && !session.tools.has(x)) ?? null;
+    // A later tool appearing for the first time this session scales in. Only built-in levels
+    // reveal it: a custom level or the editor's sandbox must not use up the game's reveal.
+    const fresh = builtInId
+      ? (REVEALABLE.find((x) => available.includes(x) && !session.tools.has(x)) ?? null)
+      : null;
     if (fresh) session.tools.add(fresh);
     setReveal(fresh);
     // A level's tip shows the first time that level is opened this session.
     const showTip =
-      !!level.tip && !!tipCfg && available.includes(tipCfg.tool) && !session.tips.has(level.id);
-    if (showTip) session.tips.add(level.id);
+      !!builtInId &&
+      !!level.tip &&
+      !!tipCfg &&
+      available.includes(tipCfg.tool) &&
+      !session.tips.has(builtInId);
+    if (showTip) session.tips.add(builtInId);
     setTip(showTip ? level.tip! : null);
     const t =
       showTip && tipCfg.select
@@ -156,7 +178,7 @@ export function GameScreen({ store }: { store: Store }) {
   // Level 1 tutorial, for players who have not solved the level yet: the current step is the
   // first one not done, so undo moves the coach back.
   const firstTime = useMemo(
-    () => !store.progress.peek().levels[level.id]?.stars[0],
+    () => !!builtInId && !store.progress.peek().levels[builtInId]?.stars[0],
     [construction],
   );
   const scene = construction.scene();
@@ -227,6 +249,7 @@ export function GameScreen({ store }: { store: Store }) {
     hintBtn.current?.focus({ preventScroll: true });
   };
   const isLast = LEVELS[LEVELS.length - 1]!.id === level.id;
+  const exit = custom ? store.exitCustomLevel : store.goToMap;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -252,24 +275,39 @@ export function GameScreen({ store }: { store: Store }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [store]);
 
+  // In the sandbox the editor's targets glow the way the tutorial marks its targets.
+  const glow = sandbox ? { ids: marked ?? [], spots: [] } : coachTargets;
+
   return (
-    <div class="game">
+    <div class={sandbox && sidePanel ? 'game has-side' : 'game'}>
       {/* Always mounted, so a tip that appears is announced (a fresh live region often is not). */}
       <div role="status" class="sr-only">
         {tip ?? ''}
       </div>
-      <TopBar
-        level={level}
-        moves={construction.moves()}
-        targets={level.targets}
-        onHint={onHint}
-        hintOpen={showHint}
-        hintDisabled={!!completion}
-        hintRef={hintBtn}
-        onMap={store.goToMap}
-        theme={store.progress.value.theme}
-        onTheme={store.setTheme}
-      />
+      {sandbox ? (
+        <TopBar
+          level={{
+            title: level.title || 'Untitled problem',
+            goalText: level.goalText || 'Each move you make becomes a solution step.',
+          }}
+          moves={construction.moves()}
+          theme={store.progress.value.theme}
+        />
+      ) : (
+        <TopBar
+          level={level}
+          moves={construction.moves()}
+          targets={level.targets}
+          onHint={onHint}
+          hintOpen={showHint}
+          hintDisabled={!!completion}
+          hintRef={hintBtn}
+          onMap={exit}
+          back={custom}
+          theme={store.progress.value.theme}
+          onTheme={store.setTheme}
+        />
+      )}
       <ToolPalette
         tools={tools}
         active={store.tool.value}
@@ -286,7 +324,7 @@ export function GameScreen({ store }: { store: Store }) {
         onTipDismiss={() => setTip(null)}
       />
       <main class="game-canvas" ref={canvasHost} onPointerDown={() => setHintOpen(false)}>
-        <Canvas store={store} coach={coachTargets} onView={coachActive ? onView : undefined} />
+        <Canvas store={store} coach={glow} onView={coachActive ? onView : undefined} />
         {coachActive && (
           <CoachOverlay
             key={level.id}
@@ -299,6 +337,7 @@ export function GameScreen({ store }: { store: Store }) {
           />
         )}
       </main>
+      {sandbox && sidePanel && <div class="game-side">{sidePanel}</div>}
       {showHint && (
         <HintPanel
           hint={hint}
@@ -313,9 +352,10 @@ export function GameScreen({ store }: { store: Store }) {
           explanation={completion.explanation}
           targets={level.targets}
           unlocked={completion.unlocked}
-          onNext={isLast ? undefined : store.nextLevel}
-          onReplay={() => store.openLevel(level.id)}
+          onNext={isLast || custom ? undefined : store.nextLevel}
+          onReplay={store.replayLevel}
           onMap={store.goToMap}
+          onBack={custom ? store.exitCustomLevel : undefined}
         />
       )}
     </div>

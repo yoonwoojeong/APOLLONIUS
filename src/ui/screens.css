@@ -129,7 +129,9 @@
   position: relative;
   align-self: center;
   justify-self: center;
-  width: min(100%, 420px);
+  /* Upright arc: as wide as fits, but short windows shrink it so the six nodes fit the height. */
+  width: min(100%, 420px, max(280px, (100vh - 170px) * 100 / 170));
+  width: min(100%, 420px, max(280px, (100dvh - 170px) * 100 / 170));
   aspect-ratio: 100 / 170;
   margin-top: 16px;
 }
@@ -314,13 +316,7 @@
   }
 
   .map-stage {
-    width: min(100%, 1080px);
-    aspect-ratio: 1000 / 380;
-    margin-top: 0;
-  }
-
-  .map-arc.is-wide {
-    display: block;
+    margin-top: 8px;
   }
 
   .title-arc {
@@ -329,6 +325,23 @@
 
   .title-arc path {
     stroke-width: 1.26;
+  }
+}
+
+/*
+ * The horizontal arc needs room: neighbouring nodes sit 15.9–17% of the stage apart, so it
+ * waits for a stage of ~1020 px. Narrower windows (tablets, small laptops) keep the upright arc.
+ */
+@media (min-width: 1100px) {
+  .map-stage {
+    container-type: inline-size;
+    width: min(100%, 1080px);
+    aspect-ratio: 1000 / 380;
+    margin-top: 0;
+  }
+
+  .map-arc.is-wide {
+    display: block;
   }
 
   .map-arc.is-narrow {
@@ -340,6 +353,10 @@
     top: var(--wy);
   }
 
+  /*
+   * Nodes are equally spaced in angle, so the outer pairs are closest: 15.9cqw apart.
+   * 14 px less keeps a clear gap between neighbouring hit boxes.
+   */
   .map-node {
     left: 0;
     top: -22px;
@@ -352,10 +369,16 @@
       'stars';
     justify-items: center;
     row-gap: 6px;
-    width: 172px;
+    width: min(172px, calc(15.9cqw - 14px));
     max-width: none;
     padding: 0 6px 8px;
     text-align: center;
+  }
+
+  /* The numeral sits on its own line above the title, the same on every node. */
+  .map-num {
+    display: block;
+    margin: 0 0 1px;
   }
 
   .map-stars {

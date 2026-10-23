@@ -1218,32 +1218,6 @@ button.check-row:focus-visible {
   display: none;
 }
 
-/*
- * One way back in Solve: the mode bar's Back (to My problems) and the Setup tab. The game
- * bar's own Back (to Setup) would stack a second, identical arrow under the first.
- */
-.editor[data-mode='solve'] .topbar-map {
-  display: none;
-}
-
-@media (max-width: 767px) {
-  .editor[data-mode='solve'] .topbar {
-    column-gap: 0;
-    padding-left: 16px;
-  }
-
-  .editor[data-mode='solve'] .topbar-goal {
-    padding-left: 0;
-  }
-}
-
-@media (min-width: 768px) {
-  /* The empty Back column keeps its gap: the title still starts 20 px in. */
-  .editor[data-mode='solve'] .topbar {
-    padding-left: 8px;
-  }
-}
-
 /* Pick mode: lines and circles take keyboard focus at a marker shown only when focused. */
 .pick-key {
   outline: none;

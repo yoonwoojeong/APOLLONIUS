@@ -71,6 +71,19 @@
   grid-area: map;
 }
 
+/* Without the Map/Back button (the editor's Solve): the title leads the bar. */
+.topbar.no-back {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'title actions'
+    'goal counter';
+  padding-left: 16px;
+}
+
+.topbar.no-back .topbar-goal {
+  padding-left: 0;
+}
+
 .topbar-title {
   grid-area: title;
   display: flex;
@@ -241,6 +254,16 @@
     column-gap: 12px;
     min-height: 60px;
     padding: 8px 12px 8px 16px;
+  }
+
+  .topbar.no-back {
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: 'title goal counter actions';
+    padding-left: 20px;
+  }
+
+  .topbar.no-back .topbar-goal {
+    padding-left: 16px;
   }
 
   .topbar-title {

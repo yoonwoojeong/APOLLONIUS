@@ -296,10 +296,16 @@ describe('EditorScreen', () => {
     expect(host.querySelectorAll('.step-row')).toHaveLength(0);
   });
 
-  it("the game's Back in Solve returns to Setup", () => {
+  it("Solve has one Back (the mode bar's); the Setup tab returns to Setup", () => {
     const { game, editor, host } = setup();
     click(tab(host, 'Solve'));
-    click(btn(host, 'Back to Setup'));
+    expect(host.querySelector('.topbar')).not.toBeNull();
+    expect(host.querySelector('.topbar .topbar-map')).toBeNull();
+    const backs = [...host.querySelectorAll('button')].filter((b) =>
+      /^Back/.test(b.getAttribute('aria-label') ?? ''),
+    );
+    expect(backs.map((b) => b.getAttribute('aria-label'))).toEqual(['Back to My problems']);
+    click(tab(host, 'Setup'));
     expect(editor.mode.value).toBe('setup');
     expect(game.screen.value).toBe('editor');
     expect(host.querySelector('[data-testid="setup-canvas"]')).not.toBeNull();

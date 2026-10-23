@@ -19,7 +19,8 @@ interface Props {
   hintDisabled?: boolean;
   /** Focus returns here when the hint panel closes. */
   hintRef?: Ref<HTMLButtonElement>;
-  onMap: () => void;
+  /** Absent: no Map/Back button (the editor's Solve, whose mode bar has the one Back). */
+  onMap?: () => void;
   /** Custom levels: the Map button reads Back (and `onMap` leaves the level). */
   back?: boolean;
   /** Accessible name of the Back button (default `Back`). */
@@ -40,16 +41,18 @@ export function TopBar(props: Props) {
   );
   const backName = props.back ? (props.backLabel ?? 'Back') : 'Map';
   return (
-    <header class="topbar">
-      <button
-        type="button"
-        class="icon-btn topbar-map"
-        aria-label={backName}
-        title={backName}
-        onClick={onMap}
-      >
-        {props.back ? <BackIcon /> : <MapIcon />}
-      </button>
+    <header class={onMap ? 'topbar' : 'topbar no-back'}>
+      {onMap && (
+        <button
+          type="button"
+          class="icon-btn topbar-map"
+          aria-label={backName}
+          title={backName}
+          onClick={onMap}
+        >
+          {props.back ? <BackIcon /> : <MapIcon />}
+        </button>
+      )}
       <h1 class="topbar-title">
         {level.number !== undefined && (
           <>

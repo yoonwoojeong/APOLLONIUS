@@ -289,9 +289,6 @@ export function GameScreen({ store, sidePanel, marked }: Props) {
             goalText: level.goalText || 'Each move you make becomes a solution step.',
           }}
           moves={construction.moves()}
-          onMap={exit}
-          back
-          backLabel="Back to Setup"
           theme={store.progress.value.theme}
         />
       ) : (

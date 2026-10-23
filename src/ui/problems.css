@@ -291,6 +291,11 @@
   text-align: center;
 }
 
+/* Under the list, the note lines up with the cards (centred only under the empty state). */
+.pb-list ~ .pb-note {
+  text-align: start;
+}
+
 /* Toast */
 
 .pb-toast-region {

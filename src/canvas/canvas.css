@@ -1,0 +1,550 @@
+/* Construction canvas. Colours come from tokens only; strokes keep constant screen width. */
+
+.canvas-host {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: crosshair;
+  shape-rendering: geometricPrecision;
+}
+
+/* Focused programmatically on pointerdown so Space/Esc reach it; it is not a tab stop. */
+.canvas:focus {
+  outline: none;
+}
+
+.canvas.is-grab {
+  cursor: grab;
+}
+
+.canvas.is-panning {
+  cursor: grabbing;
+}
+
+.canvas line,
+.canvas path,
+.canvas circle,
+.magnifier line,
+.magnifier path,
+.magnifier circle {
+  vector-effect: non-scaling-stroke;
+}
+
+.grid {
+  transition: opacity var(--t-ui) var(--ease-out);
+  pointer-events: none;
+}
+
+.grid-dot {
+  fill: var(--grid);
+}
+
+/* Objects */
+
+.stroke {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: var(--stroke);
+  stroke-linecap: butt;
+  transition: stroke var(--t-ui) var(--ease-out);
+}
+
+.is-given .stroke {
+  stroke-width: var(--stroke-given);
+}
+
+.is-hint .stroke {
+  stroke: var(--snap);
+}
+
+.is-hint .dot {
+  fill: var(--snap);
+}
+
+.is-goal .stroke {
+  stroke: var(--gold);
+}
+
+.dot {
+  fill: var(--ink);
+  transition: fill var(--t-ui) var(--ease-out);
+}
+
+.is-goal .dot {
+  fill: var(--gold);
+}
+
+.hit {
+  fill: transparent;
+}
+
+[data-kind='point'] {
+  outline: none;
+}
+
+[data-kind='point']:focus-visible .dot {
+  fill: var(--snap);
+}
+
+.label {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 550;
+  fill: var(--ink);
+  stroke: var(--bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  paint-order: stroke;
+  pointer-events: none;
+}
+
+.candidate {
+  fill: var(--ink);
+  opacity: 0.5;
+}
+
+/* Crossings are keyboard stops only; pointers snap to them through the canvas. */
+.candidate-stop {
+  outline: none;
+  pointer-events: none;
+}
+
+.candidate-stop:focus-visible .candidate {
+  fill: var(--snap);
+  opacity: 1;
+}
+
+/* The armed gesture's first endpoint stays ringed until the gesture ends. */
+.armed-ring {
+  fill: none;
+  stroke: var(--snap);
+  stroke-width: 1.5px;
+  pointer-events: none;
+}
+
+/* Ghost, snap and lock */
+
+.ghost {
+  pointer-events: none;
+}
+
+.ghost-stroke {
+  fill: none;
+  stroke: var(--ink-ghost);
+  stroke-width: var(--stroke);
+}
+
+.ghost-anchor {
+  fill: var(--snap);
+}
+
+.ghost-ring {
+  fill: none;
+  stroke: var(--invalid);
+  stroke-width: var(--stroke);
+}
+
+.ghost.is-shaking .ghost-anchor {
+  fill: var(--invalid);
+}
+
+.ghost.is-shaking {
+  animation: ghost-shake 240ms ease-in-out both;
+}
+
+@keyframes ghost-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-5px);
+  }
+  40% {
+    transform: translateX(5px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+
+.snap {
+  pointer-events: none;
+}
+
+.snap-dot {
+  fill: var(--snap);
+}
+
+.snap-halo {
+  fill: var(--snap);
+  opacity: 0.18;
+}
+
+.snap-empty {
+  fill: var(--ink-ghost);
+}
+
+.snap-curve {
+  fill: none;
+  stroke: var(--snap);
+  stroke-width: calc(var(--stroke) + 1px);
+}
+
+.lock-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lock-pulse 120ms cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+
+@keyframes lock-pulse {
+  from {
+    transform: scale(0.6);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+/* Draw-on (pathLength = 1) and its reverse on retained copies */
+
+.draw-in {
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+  animation: draw-in var(--t-draw) var(--ease-out) forwards;
+}
+
+@keyframes draw-in {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.draw-out {
+  stroke-dasharray: 1 1;
+  animation: draw-out var(--t-draw) var(--ease-out) forwards;
+}
+
+@keyframes draw-out {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: 1;
+  }
+}
+
+.pop-in,
+.pop-out {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.pop-in {
+  animation: pop-in var(--t-draw) var(--ease-out) both;
+}
+
+.pop-out {
+  animation: pop-out var(--t-draw) var(--ease-out) forwards;
+}
+
+@keyframes pop-in {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+}
+
+@keyframes pop-out {
+  to {
+    transform: scale(0);
+    opacity: 0;
+  }
+}
+
+/* Duplicate pulse and goal gold */
+
+.pulse-stroke {
+  fill: none;
+  stroke: var(--snap);
+  animation: pulse-stroke 420ms var(--ease-out) forwards;
+}
+
+@keyframes pulse-stroke {
+  0% {
+    opacity: 0;
+    stroke-width: 1.5px;
+  }
+  30% {
+    opacity: 0.75;
+    stroke-width: 3.5px;
+  }
+  100% {
+    opacity: 0;
+    stroke-width: 1.5px;
+  }
+}
+
+.pulse-dot {
+  fill: none;
+  stroke: var(--snap);
+  stroke-width: 2px;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pulse-dot 420ms var(--ease-out) forwards;
+}
+
+@keyframes pulse-dot {
+  from {
+    transform: scale(0.5);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.gold-stroke {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 2.5px;
+}
+
+.gold-dot {
+  fill: var(--gold);
+}
+
+/* Hints: tier 2 halo under the step's inputs, tier 3 dashed gold ghost of its result */
+
+.hint-glow,
+.hint-ghosts,
+.shimmer-layer {
+  pointer-events: none;
+}
+
+.hint-halo-stroke,
+.hint-halo-dot {
+  opacity: 0.14;
+  animation: hint-glow 1.6s ease-in-out infinite alternate;
+}
+
+.hint-halo-stroke {
+  fill: none;
+  stroke: var(--snap);
+  stroke-width: 11px;
+  stroke-linecap: round;
+}
+
+.hint-halo-dot {
+  fill: var(--snap);
+}
+
+@keyframes hint-glow {
+  from {
+    opacity: 0.1;
+  }
+  to {
+    opacity: 0.3;
+  }
+}
+
+.hint-ghost {
+  animation: fade-in var(--t-ui) var(--ease-out) both;
+}
+
+.hint-ghost-stroke,
+.hint-ghost-ring {
+  fill: none;
+  stroke: var(--gold);
+  stroke-width: 2px;
+  stroke-linecap: round;
+}
+
+.hint-ghost-stroke {
+  stroke-dasharray: 7 7;
+}
+
+.hint-ghost-ring {
+  stroke-dasharray: 4 4;
+}
+
+.hint-ghost-dot {
+  fill: var(--gold);
+}
+
+/* Completion shimmer: one soft ring of gold light after the draw-on (decorative). */
+
+.shimmer {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: shimmer 900ms var(--ease-out) calc(var(--t-draw) - 40ms) both;
+}
+
+.shimmer-stop {
+  stop-color: var(--gold);
+}
+
+@keyframes shimmer {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+}
+
+/* Touch loupe */
+
+.magnifier {
+  position: absolute;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--bg);
+  box-shadow:
+    0 0 0 1px var(--muted),
+    0 6px 20px rgb(0 0 0 / 18%);
+}
+
+.magnifier svg {
+  display: block;
+}
+
+.reticle {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1px;
+}
+
+/* Tutorial targets: a soft halo with a ring rippling out (fade only under reduced motion). */
+.coach-glow {
+  pointer-events: none;
+  animation: fade-in var(--t-ui) var(--ease-out) both;
+}
+
+.coach-halo-dot {
+  fill: var(--snap);
+  opacity: 0.22;
+}
+
+.coach-halo-stroke {
+  fill: none;
+  stroke: var(--snap);
+  stroke-width: 9px;
+  stroke-linecap: round;
+  opacity: 0.16;
+}
+
+.coach-ring {
+  fill: none;
+  stroke: var(--snap);
+  stroke-width: 2px;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: coach-ripple 1.8s var(--ease-out) infinite;
+}
+
+@keyframes coach-ripple {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.55);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coach-glow {
+    animation-duration: 80ms;
+  }
+
+  .coach-ring {
+    animation: none;
+    opacity: 0.55;
+  }
+
+  .draw-in,
+  .pop-in {
+    stroke-dasharray: none;
+    animation: fade-in var(--t-draw) linear both;
+  }
+
+  .draw-out,
+  .pop-out {
+    stroke-dasharray: none;
+    animation: fade-out var(--t-draw) linear forwards;
+  }
+
+  .lock-pulse {
+    animation: none;
+  }
+
+  .ghost.is-shaking {
+    animation: fade-out 240ms linear both;
+  }
+
+  .pulse-stroke,
+  .pulse-dot {
+    animation: fade-out 240ms linear forwards;
+  }
+
+  .pulse-stroke {
+    stroke-width: 4px;
+  }
+
+  .pulse-dot {
+    transform: scale(1.2);
+  }
+
+  .hint-halo-stroke,
+  .hint-halo-dot {
+    animation: none;
+    opacity: 0.24;
+  }
+
+  .hint-ghost {
+    animation: fade-in 80ms linear both;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}

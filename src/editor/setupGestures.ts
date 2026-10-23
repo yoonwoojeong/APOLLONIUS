@@ -194,6 +194,23 @@ export function setupReducer(state: SetupGestureState, ev: SetupEvent, ctx: Setu
   return done(commitTwoPoint(from, ev, ctx));
 }
 
+/** "point A", "segment AB", "circle centred at A" — how a given reads in prompts and announcements. */
+export function givenName(def: ObjDef, id: ObjId, labels: SetupModel['labels']): string {
+  const l = (x: ObjId): string => labels[x] ?? x;
+  switch (def.type) {
+    case 'given-point':
+      return `point ${l(id)}`;
+    case 'given-line':
+      return `${def.extent} ${l(def.a)}${l(def.b)}`;
+    case 'circle':
+      return `circle centred at ${l(def.center)}`;
+    case 'given-circle':
+      return 'circle';
+    default:
+      return 'object';
+  }
+}
+
 // --- Model edits -------------------------------------------------------------------------
 
 function refsOf(def: ObjDef): ObjId[] {

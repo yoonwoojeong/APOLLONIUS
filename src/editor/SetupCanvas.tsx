@@ -13,9 +13,11 @@ import { gridPattern } from '../canvas/shapes';
 import { findSnap, SNAP_RADIUS, type InputKind } from '../canvas/snap';
 import { TAP_SLOP_PX } from '../canvas/gestures';
 import { useViewport } from '../canvas/useViewport';
-import { toScreen, toWorld, type Rect } from '../canvas/viewport';
+import { toScreen, toWorld, type Rect, type Viewport } from '../canvas/viewport';
+import { isControl, isTextEntry, stopTarget } from '../canvas/Canvas';
 import type { Editor } from './editorStore';
 import {
+  givenName,
   setupReducer,
   type SetupEvent,
   type SetupGestureState,
@@ -32,7 +34,38 @@ const FALLBACK_DIAMETER = 10;
 let instances = 0;
 const IDLE: SetupGestureState = { mode: 'idle' };
 
-type Mode = 'none' | 'gesture' | 'pinch' | 'consumed';
+type Mode = 'none' | 'gesture' | 'pan' | 'pinch' | 'consumed';
+
+/** Arrow-key nudge of a focused point, in screen px at the current zoom (Shift: ten times). */
+const NUDGE_PX = 4;
+const NUDGE_SHIFT = 10;
+const ARROWS: Record<string, Vec> = {
+  ArrowLeft: { x: -1, y: 0 },
+  ArrowRight: { x: 1, y: 0 },
+  ArrowUp: { x: 0, y: -1 },
+  ArrowDown: { x: 0, y: 1 },
+};
+/** A point added from the keyboard keeps this far (screen px) from every other point. */
+const ADD_GAP_PX = 40;
+
+/** Where a keyboard-added point goes: the view centre, else the nearest free spot around it. */
+function freeSpot(v: Viewport, scene: Scene): Vec {
+  const taken = scene.objects.flatMap((o) => (isPointValue(o.value) ? [toScreen(v, o.value)] : []));
+  const c = { x: v.width / 2, y: v.height / 2 };
+  for (let ring = 0; ring <= 6; ring++) {
+    for (let k = 0; k < (ring ? 8 * ring : 1); k++) {
+      const a = (2 * Math.PI * k) / (8 * ring || 1);
+      const p = {
+        x: c.x + ring * ADD_GAP_PX * Math.cos(a),
+        y: c.y + ring * ADD_GAP_PX * Math.sin(a),
+      };
+      if (taken.every((q) => dist(q, p) >= ADD_GAP_PX)) return toWorld(v, p);
+    }
+  }
+  return toWorld(v, c);
+}
+
+const fmt = (n: number): string => (Math.round(n * 100) / 100).toString();
 
 const inputKind = (e: PointerEvent): InputKind =>
   e.pointerType === 'touch' ? 'touch' : e.pointerType === 'pen' ? 'pen' : 'mouse';
@@ -93,9 +126,16 @@ interface Props {
   onPointKey?: (id: ObjId, key: 'Enter' | 'F2') => void;
   /** Content pinned to a point on screen (the label editor); follows pans and zooms. */
   overlay?: { id: ObjId; content: ComponentChildren } | null;
+  /** What a keyboard action did, for the screen's status region. */
+  onAnnounce?: (text: string) => void;
 }
 
-/** The Setup canvas: place and drag givens with the game's pointer flow, through the editor. */
+/**
+ * The Setup canvas: place and drag givens with the game's pointer flow, through the editor.
+ * Keyboard: N (or Enter on the canvas with the Point tool) adds a point at the view centre;
+ * arrows nudge the focused point (one undo step per press); with a two-point tool, Enter on a
+ * point starts and Enter on another finishes, as in the game; Space+drag pans; Esc cancels.
+ */
 export function SetupCanvas(props: Props) {
   const { editor, tool, hideCentre, onPick, selected, fitKey, overlay } = props;
   const model = editor.setup.value;
@@ -126,6 +166,15 @@ export function SetupCanvas(props: Props) {
   const [preview, setPreview] = useState<SetupPreview>(null);
   const [snap, setSnap] = useState<SetupTarget | null>(null);
   const [loupe, setLoupe] = useState<Vec | null>(null);
+  const [panning, setPanning] = useState(false);
+  const [spaceHeld, setSpaceHeld] = useState(false);
+  /** Two-point tools from the keyboard: the point Enter started on. */
+  const [armedId, setArmedId] = useState<ObjId | null>(null);
+  const armed = useRef<ObjId | null>(null);
+  const arm = (id: ObjId | null): void => {
+    armed.current = id;
+    setArmedId(id);
+  };
 
   const gesture = useRef<SetupGestureState>(IDLE);
   const mode = useRef<Mode>('none');
@@ -139,6 +188,12 @@ export function SetupCanvas(props: Props) {
     from: ObjId | null;
   } | null>(null);
   const pinch = useRef<{ mid: Vec; d: number } | null>(null);
+  const space = useRef(false);
+  const overCanvas = useRef(false);
+  /** A point added from the keyboard: focus moves onto it after the render. */
+  const focusId = useRef<ObjId | null>(null);
+  /** The latest `addPoint`, for the window key handler. */
+  const addRef = useRef<() => void>(() => {});
   const live = useRef({ scene, tool, hideCentre, editor, dispatch, onPick, props });
   live.current = { scene, tool, hideCentre, editor, dispatch, onPick, props };
   const picking = !!onPick;
@@ -210,13 +265,31 @@ export function SetupCanvas(props: Props) {
   useEffect(() => {
     if (gesture.current.mode !== 'idle') live.current.dispatch({ type: 'tool', tool });
     setSnap(null);
+    if (armed.current) {
+      arm(null);
+      setPreview(null);
+    }
   }, [tool]);
 
   // Entering pick mode abandons an edit in progress.
   useEffect(() => {
     if (picking && gesture.current.mode !== 'idle') live.current.dispatch({ type: 'cancel' });
     setSnap(null);
+    if (picking && armed.current) {
+      arm(null);
+      setPreview(null);
+    }
   }, [picking]);
+
+  // After a keyboard add, focus the new point (so arrows can nudge it at once).
+  useEffect(() => {
+    const id = focusId.current;
+    if (!id) return;
+    focusId.current = null;
+    svgRef.current
+      ?.querySelector<SVGElement>(`[data-kind=point][data-id="${CSS.escape(id)}"]`)
+      ?.focus({ preventScroll: true });
+  });
 
   // The Fit control refits the view to the givens as they are now.
   const firstFit = useRef(fitKey);
@@ -234,14 +307,64 @@ export function SetupCanvas(props: Props) {
     [],
   );
 
-  // Esc abandons the gesture in progress.
+  // Esc abandons the gesture in progress (or the keyboard start point); N adds a point;
+  // Space+drag pans, as in the game.
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && gesture.current.mode !== 'idle')
-        live.current.dispatch({ type: 'cancel' });
+      if (isTextEntry(e.target)) return;
+      if (e.key === 'Escape') {
+        if (gesture.current.mode !== 'idle') live.current.dispatch({ type: 'cancel' });
+        if (armed.current) {
+          arm(null);
+          setPreview(null);
+        }
+      } else if (e.key === ' ') {
+        // On a focused control Space is the pan modifier only while the pointer is over the
+        // canvas (or already panning); otherwise it keeps activating the control.
+        // In pick mode Space on a focused point, line or circle picks it instead.
+        const onStop =
+          e.target instanceof Element && !!e.target.closest('[data-pick-id], [data-kind=point]');
+        if (live.current.onPick && onStop) return;
+        if (isControl(e.target) && !overCanvas.current && !space.current) return;
+        e.preventDefault();
+        space.current = true;
+        setSpaceHeld(true);
+      } else if (
+        e.key.toLowerCase() === 'n' &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        !e.repeat &&
+        !live.current.onPick
+      ) {
+        e.preventDefault();
+        addRef.current();
+      }
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key !== ' ' || !space.current) return;
+      e.preventDefault(); // a button activates on Space keyup: not while it was the pan key
+      space.current = false;
+      setSpaceHeld(false);
+    };
+    // Leaving the window with Space held never delivers its keyup: drop the pan modifier and
+    // stop a pan in progress (the remaining pointers are ignored until they lift).
+    const blur = () => {
+      space.current = false;
+      setSpaceHeld(false);
+      if (mode.current === 'pan') {
+        mode.current = 'consumed';
+        setPanning(false);
+      }
     };
     window.addEventListener('keydown', down);
-    return () => window.removeEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', blur);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', blur);
+    };
   }, []);
 
   const pinchFrame = (): { mid: Vec; d: number } | null => {
@@ -255,6 +378,7 @@ export function SetupCanvas(props: Props) {
       mode.current = 'none';
       primary.current = null;
       pinch.current = null;
+      setPanning(false);
       setLoupe(null);
     } else if (mode.current === 'pinch') {
       mode.current = 'consumed';
@@ -271,7 +395,7 @@ export function SetupCanvas(props: Props) {
 
   const onPointerDown = (e: PointerEvent): void => {
     if (!vpRef.current) return;
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 1) return;
     e.preventDefault();
     const pt = local(e);
     const kind = inputKind(e);
@@ -281,7 +405,19 @@ export function SetupCanvas(props: Props) {
     } catch {
       /* the pointer is already gone */
     }
+    // Pointer input drops a start point picked from the keyboard.
+    if (armed.current) {
+      arm(null);
+      setPreview(null);
+    }
     if (pointers.current.size === 1) {
+      if (space.current || e.button === 1) {
+        primary.current = { id: e.pointerId, kind, start: pt, dragged: false, from: null };
+        mode.current = 'pan';
+        setPanning(true);
+        setSnap(null);
+        return;
+      }
       const at = targetAt(pt, kind);
       primary.current = {
         id: e.pointerId,
@@ -293,7 +429,7 @@ export function SetupCanvas(props: Props) {
       mode.current = 'gesture';
       setSnap(null);
       if (!live.current.onPick) dispatch(event('down', pt, kind));
-    } else if (pointers.current.size === 2) {
+    } else if (pointers.current.size === 2 && mode.current !== 'pan') {
       // A second finger is never part of an edit: abandon it and pinch/pan instead.
       if (mode.current === 'gesture' && !live.current.onPick) dispatch({ type: 'cancel' });
       mode.current = 'pinch';
@@ -319,6 +455,8 @@ export function SetupCanvas(props: Props) {
       if (!now || !was) return;
       view.move(sub(now.mid, was.mid), now.mid, was.d > 0 ? now.d / was.d : 1);
       pinch.current = now;
+    } else if (mode.current === 'pan') {
+      view.move(sub(pt, last), pt, 1);
     } else if (mode.current === 'gesture' && e.pointerId === primary.current?.id) {
       const p = primary.current;
       if (dist(pt, p.start) > TAP_SLOP_PX) p.dragged = true;
@@ -352,43 +490,158 @@ export function SetupCanvas(props: Props) {
     release();
   };
 
+  const announce = (text: string): void => live.current.props.onAnnounce?.(text);
+  const labelOf = (id: ObjId): string => editor.setup.peek().labels[id] ?? id;
+
+  /** N, or Enter on the canvas with the Point tool: a point at the view centre (or beside). */
+  const addPoint = (): void => {
+    const v = vpRef.current;
+    if (!v || gesture.current.mode !== 'idle' || mode.current !== 'none') return;
+    const id = editor.allocId();
+    const label = editor.nextLabel();
+    editor.applySetup({
+      type: 'add',
+      specs: [{ id, def: { type: 'given-point', pos: freeSpot(v, live.current.scene) } }],
+      labels: { [id]: label },
+    });
+    focusId.current = id;
+    announce(`Added point ${label}.`);
+  };
+  addRef.current = addPoint;
+
+  /** Arrows on a focused point: one undo step per press. */
+  const nudge = (id: ObjId, dir: Vec, far: boolean): void => {
+    const v = vpRef.current;
+    const def = editor.setup.peek().givens.find((g) => g.id === id)?.def;
+    if (!v || def?.type !== 'given-point' || gesture.current.mode !== 'idle') return;
+    const step = (NUDGE_PX * (far ? NUDGE_SHIFT : 1)) / v.scale;
+    editor.applySetup({
+      type: 'move',
+      id,
+      pos: { x: def.pos.x + dir.x * step, y: def.pos.y + dir.y * step },
+    });
+    const now = editor.setup.peek().givens.find((g) => g.id === id)?.def;
+    if (now?.type === 'given-point')
+      announce(`${labelOf(id)} moved to (${fmt(now.pos.x)}, ${fmt(now.pos.y)}).`);
+  };
+
+  /**
+   * Enter on a point with a two-point tool, as in the game: the first Enter picks the start,
+   * Enter on another point finishes (through the same reducer as a drag, so one undo step),
+   * Enter on the start again drops it.
+   */
+  const twoPointKey = (el: Element): void => {
+    const v = vpRef.current;
+    const { scene: sc, tool: t } = live.current;
+    const end = stopTarget(el, sc, []);
+    if (!v || !end || end.kind !== 'point' || gesture.current.mode !== 'idle') return;
+    const startId = armed.current;
+    const startPos = startId ? (sc.byId.get(startId)?.value ?? null) : null;
+    if (!startId || !isPointValue(startPos)) {
+      arm(end.id);
+      setPreview(null);
+      const name = t.charAt(0).toUpperCase() + t.slice(1);
+      announce(`${name} from ${labelOf(end.id)}. Move to another point and press Enter.`);
+      return;
+    }
+    arm(null);
+    if (startId === end.id) {
+      setPreview(null);
+      announce('Start point dropped.');
+      return;
+    }
+    const before = editor.setup.peek().givens.length;
+    const from = { kind: 'point' as const, id: startId, pos: startPos };
+    const at = (p: Vec) => ({ screen: toScreen(v, p), world: p });
+    dispatch({ type: 'down', target: from, ...at(startPos) });
+    dispatch({ type: 'up', target: end, ...at(end.pos) });
+    const m = editor.setup.peek();
+    const added = m.givens.length > before ? m.givens[m.givens.length - 1]! : null;
+    announce(added ? `Added ${givenName(added.def, added.id, m.labels)}.` : 'Nothing was added.');
+  };
+
+  // While a start point is picked, focusing another point previews the shape to it.
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const onFocusIn = (e: FocusEvent): void => {
+      const startId = armed.current;
+      if (!startId) return;
+      const { scene: sc, tool: t } = live.current;
+      const from = sc.byId.get(startId)?.value ?? null;
+      const to = stopTarget(e.target, sc, []);
+      if (t === 'point' || !isPointValue(from) || to?.kind !== 'point' || to.id === startId) return;
+      setPreview({ kind: t, from, to: to.pos });
+    };
+    svg.addEventListener('focusin', onFocusIn);
+    return () => svg.removeEventListener('focusin', onFocusIn);
+  }, []);
+
+  const onKeyDown = (e: KeyboardEvent): void => {
+    const el = (e.target as Element).closest?.('[data-kind="point"], [data-pick-id]');
+    const id = el?.getAttribute('data-pick-id') ?? el?.getAttribute('data-id');
+    const { onPick: pick, props: p, tool: t } = live.current;
+    if (pick) {
+      // Pick mode: Enter or Space on a focused point, line or circle picks it.
+      if (!el || !id || (e.key !== 'Enter' && e.key !== ' ')) return;
+      e.preventDefault();
+      pick(id);
+      return;
+    }
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    if (!el && e.target === svgRef.current && t === 'point' && e.key === 'Enter') {
+      e.preventDefault();
+      addPoint();
+      return;
+    }
+    if (!el || !id || el.getAttribute('data-kind') !== 'point') return;
+    const dir = ARROWS[e.key];
+    if (dir) {
+      e.preventDefault();
+      nudge(id, dir, e.shiftKey);
+    } else if (t === 'point' && (e.key === 'Enter' || e.key === 'F2')) {
+      e.preventDefault();
+      p.onPointKey?.(id, e.key);
+    } else if (t !== 'point' && e.key === 'Enter' && !e.repeat) {
+      e.preventDefault();
+      twoPointKey(el);
+    }
+  };
+
   const ghost: GhostView | null = preview
     ? { tool: preview.kind, from: preview.from, to: preview.to }
     : null;
   const grid = vp ? gridPattern(vp, view.fitScale) : null;
   const shownSnap = gesture.current.mode === 'idle' ? snap : null;
+  const armedValue = armedId ? (scene.byId.get(armedId)?.value ?? null) : null;
+  const armedPos = isPointValue(armedValue) ? armedValue : null;
 
   return (
     <div class="canvas-host setup-host" ref={view.hostRef}>
       <svg
         ref={svgRef}
         data-testid="setup-canvas"
-        class={picking ? 'canvas setup-canvas is-picking' : 'canvas setup-canvas'}
+        class={[
+          'canvas setup-canvas',
+          picking ? 'is-picking' : '',
+          panning ? 'is-panning' : spaceHeld ? 'is-grab' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
         role="application"
         aria-label="Setup canvas"
         tabindex={-1}
-        onKeyDown={(e) => {
-          const el = (e.target as Element).closest?.('[data-kind="point"], [data-pick-id]');
-          const id = el?.getAttribute('data-pick-id') ?? el?.getAttribute('data-id');
-          if (!el || !id) return;
-          const { onPick: pick, props: p, tool: t } = live.current;
-          if (pick) {
-            // Pick mode: Enter or Space on a focused point, line or circle picks it.
-            if (e.key !== 'Enter' && e.key !== ' ') return;
-            e.preventDefault();
-            pick(id);
-          } else if (t === 'point' && (e.key === 'Enter' || e.key === 'F2')) {
-            if (el.getAttribute('data-kind') !== 'point') return;
-            e.preventDefault();
-            p.onPointKey?.(id, e.key);
-          }
-        }}
+        onKeyDown={onKeyDown}
+        onPointerEnter={() => (overCanvas.current = true)}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
         onLostPointerCapture={onPointerCancel}
-        onPointerLeave={() => setSnap(null)}
+        onPointerLeave={() => {
+          overCanvas.current = false;
+          setSnap(null);
+        }}
         onDblClick={() => {
           if (live.current.tool === 'point' || live.current.onPick) return;
           setFitted((f) => ({ bounds, key: f.key + 1 }));
@@ -427,6 +680,7 @@ export function SetupCanvas(props: Props) {
                 candidates={[]}
                 hintIds={selected}
                 ghost={ghost}
+                armed={armedPos}
                 snap={shownSnap && shownSnap.kind !== 'handle' ? shownSnap : null}
               />
               <g class="setup-handles">

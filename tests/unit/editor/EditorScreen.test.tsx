@@ -518,4 +518,13 @@ describe('EditorScreen', () => {
       expect(btn(host, 'Delete')!.getAttribute('aria-pressed')).toBe('false');
     });
   });
+
+  it('keyboard Setup: N adds a point and the status region announces it', () => {
+    const { editor, host } = setup();
+    key('n');
+    expect(editor.setup.value.givens).toHaveLength(1);
+    const status = host.querySelector('.setup-stage .sr-only[role="status"]')!;
+    expect(status.textContent).toBe('Added point A.');
+    expect(host.querySelector('.stage-cue')!.textContent).toContain('press N');
+  });
 });

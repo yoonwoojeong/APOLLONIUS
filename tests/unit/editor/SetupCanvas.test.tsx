@@ -308,3 +308,171 @@ it('two canvases use distinct grid and scene ids', () => {
   expect(a.host.querySelector('pattern')!.id).not.toBe(b.host.querySelector('pattern')!.id);
   expect(a.host.querySelector('g[id]')!.id).not.toBe(b.host.querySelector('g[id]')!.id);
 });
+
+describe('keyboard', () => {
+  // Unmounted after each test, so no window key listener outlives its canvas.
+  afterEach(() => {
+    for (const el of [...document.body.children]) act(() => render(null, el));
+  });
+  function mountKeys(tool: SetupTool = 'point', pts: [number, number, string][] = []) {
+    const editor: Editor = createEditor(
+      createStore(null),
+      null,
+      newDraft(1000, () => 0.5),
+    );
+    for (const [x, y, l] of pts) {
+      const id = editor.allocId();
+      editor.applySetup({
+        type: 'add',
+        specs: [{ id, def: { type: 'given-point', pos: { x, y } } }],
+        labels: { [id]: l },
+      });
+    }
+    const said: string[] = [];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const draw = (t: SetupTool) =>
+      act(() =>
+        render(
+          <SetupCanvas
+            editor={editor}
+            tool={t}
+            hideCentre={false}
+            onAnnounce={(s) => said.push(s)}
+          />,
+          host,
+        ),
+      );
+    draw(tool);
+    const svg = host.querySelector<SVGSVGElement>('[data-testid=setup-canvas]')!;
+    return { editor, host, svg, said, draw };
+  }
+  const press = (target: EventTarget, key: string, init: KeyboardEventInit = {}) =>
+    act(() => {
+      target.dispatchEvent(
+        new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init }),
+      );
+    });
+  const pointEl = (host: Element, label: string) =>
+    host.querySelector<SVGGElement>(`[data-kind=point][data-label="${label}"]`)!;
+  const posOf = (editor: Editor, label: string) => {
+    const id = Object.entries(editor.setup.value.labels).find(([, l]) => l === label)![0];
+    return (
+      editor.setup.value.givens.find((g) => g.id === id)!.def as { pos: { x: number; y: number } }
+    ).pos;
+  };
+
+  it('N adds a point at the view centre, the next one beside it; focus moves to it', () => {
+    const { editor, host, said } = mountKeys();
+    press(window, 'n');
+    expect(editor.setup.value.givens).toHaveLength(1);
+    expect(posOf(editor, 'A').x).toBeCloseTo(0);
+    expect(posOf(editor, 'A').y).toBeCloseTo(0);
+    expect(document.activeElement).toBe(pointEl(host, 'A'));
+    expect(said.at(-1)).toBe('Added point A.');
+    press(window, 'N', { shiftKey: true });
+    expect(editor.setup.value.givens).toHaveLength(2);
+    const [a, b] = [posOf(editor, 'A'), posOf(editor, 'B')];
+    expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeGreaterThan(0);
+    expect(document.activeElement).toBe(pointEl(host, 'B'));
+    act(() => editor.undoSetup());
+    expect(editor.setup.value.givens).toHaveLength(1);
+  });
+
+  it('Enter on the focused canvas (no point focused) adds a point with the Point tool', () => {
+    const { editor, svg, draw } = mountKeys();
+    svg.focus();
+    press(svg, 'Enter');
+    expect(editor.setup.value.givens).toHaveLength(1);
+    draw('segment');
+    svg.focus();
+    press(svg, 'Enter');
+    expect(editor.setup.value.givens).toHaveLength(1);
+  });
+
+  it('N is ignored while typing', () => {
+    const { editor } = mountKeys();
+    const input = document.createElement('input');
+    document.body.appendChild(input);
+    press(input, 'n');
+    expect(editor.setup.value.givens).toHaveLength(0);
+  });
+
+  it('arrow keys nudge the focused point (Shift: ten times as far), one undo step each', () => {
+    const { editor, host, said } = mountKeys('point', [[0, 0, 'A']]);
+    const el = pointEl(host, 'A');
+    el.focus();
+    press(el, 'ArrowRight');
+    const step = posOf(editor, 'A').x;
+    expect(step).toBeGreaterThan(0);
+    expect(posOf(editor, 'A').y).toBe(0);
+    press(el, 'ArrowUp', { shiftKey: true });
+    expect(posOf(editor, 'A').y).toBeCloseTo(-10 * step);
+    expect(document.activeElement).toBe(pointEl(host, 'A'));
+    expect(said.at(-1)).toMatch(/^A moved to /);
+    act(() => editor.undoSetup());
+    expect(posOf(editor, 'A')).toEqual({ x: step, y: 0 });
+    act(() => editor.undoSetup());
+    expect(posOf(editor, 'A')).toEqual({ x: 0, y: 0 });
+  });
+
+  it('two-point tools: Enter on one point, then on another, adds the segment', () => {
+    const { editor, host, said } = mountKeys('segment', [
+      [-1, 0, 'A'],
+      [1, 0, 'B'],
+    ]);
+    pointEl(host, 'A').focus();
+    press(pointEl(host, 'A'), 'Enter');
+    expect(said.at(-1)).toBe('Segment from A. Move to another point and press Enter.');
+    expect(host.querySelector('[data-kind=armed]')).not.toBeNull();
+    act(() => pointEl(host, 'B').focus());
+    expect(host.querySelector('[data-kind=ghost]')).not.toBeNull();
+    press(pointEl(host, 'B'), 'Enter');
+    const added = editor.setup.value.givens.at(-1)!;
+    expect(editor.setup.value.givens).toHaveLength(3);
+    expect(added.def).toMatchObject({ type: 'given-line', extent: 'segment' });
+    expect(said.at(-1)).toBe('Added segment AB.');
+    expect(host.querySelector('[data-kind=armed]')).toBeNull();
+    act(() => editor.undoSetup());
+    expect(editor.setup.value.givens).toHaveLength(2);
+  });
+
+  it('Esc or Enter on the same point drops the start point', () => {
+    const { editor, host } = mountKeys('circle', [
+      [-1, 0, 'A'],
+      [1, 0, 'B'],
+    ]);
+    press(pointEl(host, 'A'), 'Enter');
+    press(window, 'Escape');
+    expect(host.querySelector('[data-kind=armed]')).toBeNull();
+    press(pointEl(host, 'B'), 'Enter'); // B is the new start
+    press(pointEl(host, 'B'), 'Enter'); // and Enter again drops it
+    expect(host.querySelector('[data-kind=armed]')).toBeNull();
+    press(pointEl(host, 'A'), 'Enter');
+    press(pointEl(host, 'B'), 'Enter');
+    expect(editor.setup.value.givens.at(-1)!.def).toMatchObject({ type: 'circle' });
+  });
+
+  it('Space+drag pans the view without editing the figure', () => {
+    const { editor, host, svg } = mountKeys('point', [[0, 0, 'A']]);
+    const before = pointEl(host, 'A').getAttribute('transform');
+    press(window, ' ');
+    expect(svg.classList.contains('is-grab')).toBe(true);
+    act(() => {
+      pointer(svg, 'pointerdown', 400, 300);
+      pointer(svg, 'pointermove', 450, 330);
+    });
+    expect(svg.classList.contains('is-panning')).toBe(true);
+    act(() => pointer(svg, 'pointerup', 450, 330));
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', cancelable: true }));
+    });
+    expect(svg.classList.contains('is-grab')).toBe(false);
+    expect(pointEl(host, 'A').getAttribute('transform')).not.toBe(before);
+    expect(editor.setup.value.givens).toHaveLength(1);
+    expect(posOf(editor, 'A')).toEqual({ x: 0, y: 0 });
+    expect(editor.canUndoSetup.value).toBe(true); // only the placement
+    act(() => editor.undoSetup());
+    expect(editor.canUndoSetup.value).toBe(false);
+  });
+});

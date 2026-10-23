@@ -1,37 +1,20 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import type { ObjDef, ObjId } from '../construction/types';
+import type { ObjId } from '../construction/types';
 import { GameScreen, isTextEntry } from '../ui/GameScreen';
 import { FitIcon } from '../ui/icons';
 import type { Editor, EditorMode } from './editorStore';
 import { DetailsPanel } from './DetailsPanel';
 import { EDITOR_PANEL_ID, ModeBar, modeTabId } from './ModeBar';
 import { SetupCanvas } from './SetupCanvas';
-import { dependants, LABEL_RE, type SetupModel, type SetupTool } from './setupGestures';
+import { dependants, givenName, LABEL_RE, type SetupTool } from './setupGestures';
 import { SETUP_TOOLS, SetupPalette } from './SetupPalette';
 import { StepsPanel } from './StepsPanel';
 import { TestPanel } from './TestPanel';
 import './editor.css';
 
-/** "point A", "segment AB", "circle centred at A" — how a given reads in the delete prompt. */
-function nameOf(def: ObjDef, id: ObjId, labels: SetupModel['labels']): string {
-  const l = (x: ObjId): string => labels[x] ?? x;
-  switch (def.type) {
-    case 'given-point':
-      return `point ${l(id)}`;
-    case 'given-line':
-      return `${def.extent} ${l(def.a)}${l(def.b)}`;
-    case 'circle':
-      return `circle centred at ${l(def.center)}`;
-    case 'given-circle':
-      return 'circle';
-    default:
-      return 'object';
-  }
-}
-
 /** What the Setup canvas says while the figure is still being started (or in Delete). */
 const TOOL_CUES: Record<SetupTool, string> = {
-  point: 'Tap to place a point. Drag a point to move it.',
+  point: 'Tap to place a point (or press N). Drag a point to move it.',
   segment: 'Drag from one point to another to draw a segment.',
   ray: 'Drag from the start point towards the second point to draw a ray.',
   line: 'Drag from one point to another to draw a line.',
@@ -148,6 +131,8 @@ function SetupMode({
   const [chosen, setChosen] = useState<ObjId | null>(null);
   const [editing, setEditing] = useState(false);
   const [fitKey, setFitKey] = useState(0);
+  /** What the last keyboard action on the canvas did (announced in the status region). */
+  const [said, setSaid] = useState('');
   const exists = (id: ObjId | null): id is ObjId => !!id && model.givens.some((g) => g.id === id);
   const pick = exists(picked) ? picked : null;
   const going = pick ? dependants(model, pick) : [];
@@ -241,7 +226,7 @@ function SetupMode({
   const target = pick ? model.givens.find((g) => g.id === pick)! : null;
   const prompt = target
     ? {
-        name: nameOf(target.def, target.id, model.labels),
+        name: givenName(target.def, target.id, model.labels),
         rest:
           going.length > 0
             ? ` and ${going.length} ${going.length === 1 ? 'object that depends' : 'objects that depend'} on it`
@@ -277,6 +262,7 @@ function SetupMode({
           fitKey={fitKey}
           onTap={(id) => select(id, !!id && id === sel)}
           onPointKey={(id, key) => select(id, key === 'F2' || id === sel)}
+          onAnnounce={setSaid}
           overlay={
             sel && editing
               ? {
@@ -297,9 +283,9 @@ function SetupMode({
         <p class={cue ? 'stage-cue' : 'stage-cue is-empty'} role="status">
           {cue ?? ''}
         </p>
-        {/* The delete prompt, announced when it appears. */}
+        {/* The delete prompt, announced when it appears; else what a canvas key just did. */}
         <p class="sr-only" role="status">
-          {prompt ? `Delete ${prompt.name}${prompt.rest}? ${prompt.breaks}` : ''}
+          {prompt ? `Delete ${prompt.name}${prompt.rest}? ${prompt.breaks}` : said}
         </p>
         {model.givens.length > 0 && (
           <button

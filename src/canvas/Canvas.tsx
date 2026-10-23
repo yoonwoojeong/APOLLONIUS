@@ -41,15 +41,15 @@ const isEndpoint = (t: SnapTarget | null): boolean =>
   !!t && (t.kind === 'point' || t.kind === 'candidate');
 
 /** Text entry keeps its own keys (Space, Esc); buttons do not count. */
-const isTextEntry = (t: EventTarget | null): boolean =>
+export const isTextEntry = (t: EventTarget | null): boolean =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 
 /** Focus on a control (e.g. the tool button just clicked) rather than on the page or canvas. */
-const isControl = (t: EventTarget | null): boolean =>
+export const isControl = (t: EventTarget | null): boolean =>
   t instanceof HTMLElement && t !== document.body && !(t instanceof SVGElement);
 
 /** The point or crossing a keyboard stop on the canvas stands for. */
-function stopTarget(
+export function stopTarget(
   el: EventTarget | null,
   scene: Scene,
   candidates: Candidate[],

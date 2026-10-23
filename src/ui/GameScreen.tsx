@@ -1,7 +1,7 @@
 import { useSignal, type Signal } from '@preact/signals';
 import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { Canvas } from '../canvas/Canvas';
+import { Canvas, isTextEntry } from '../canvas/Canvas';
 import { isPointValue } from '../canvas/candidates';
 import { toScreen, type Viewport } from '../canvas/viewport';
 import type { ObjDef, ObjId, Scene } from '../construction/types';
@@ -19,8 +19,7 @@ import { TopBar } from './TopBar';
 import './game.css';
 
 /** Text entry keeps its own keys; buttons do not count. */
-export const isTextEntry = (t: EventTarget | null): boolean =>
-  t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+export { isTextEntry };
 
 /** Tools that arrive later and get a reveal the first time they appear in a session. */
 const REVEALABLE: ToolId[] = ['perp-bisector'];

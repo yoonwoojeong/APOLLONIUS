@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { refIds } from '../construction/refs';
 import type { ObjId } from '../construction/types';
 import { GameScreen, isTextEntry } from '../ui/GameScreen';
 import { FitIcon } from '../ui/icons';
@@ -28,12 +29,7 @@ function stepsBreaking(editor: Editor, gone: ObjId[]): number {
   const working = editor.broken.peek() ?? steps.length;
   let n = 0;
   for (const st of steps.slice(0, working)) {
-    const uses = st.objects.some((o) => {
-      const d = o.def as Record<string, unknown>;
-      return ['a', 'b', 'center', 'through', 'curve'].some(
-        (k) => Object.hasOwn(d, k) && lost.has(d[k] as ObjId),
-      );
-    });
+    const uses = st.objects.some((o) => refIds(o.def).some((r) => lost.has(r)));
     if (!uses) continue;
     n++;
     for (const o of st.objects) lost.add(o.id);

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { describe } from '../construction/describe';
+import { refIds } from '../construction/refs';
 import type { ObjSpec, Scene, SceneObject } from '../construction/types';
 import { LIMITS, NUDGE_FALLBACK } from '../problems/format';
 import { StarIcon } from '../ui/icons';
@@ -16,12 +17,9 @@ function describeSpec(o: ObjSpec, scene: Scene): string {
   const live = scene.byId.get(o.id);
   if (live) return describe(live, scene);
   const byId = new Map(scene.byId);
-  const d = o.def as Record<string, unknown>;
-  for (const k of ['a', 'b', 'center', 'through', 'curve']) {
-    const ref = Object.hasOwn(d, k) ? d[k] : undefined;
-    if (typeof ref === 'string' && !byId.has(ref)) {
+  for (const ref of refIds(o.def)) {
+    if (!byId.has(ref))
       byId.set(ref, { id: ref, def: o.def, value: null, given: false, label: '?' });
-    }
   }
   const stub: SceneObject = { id: o.id, def: o.def, given: false, value: null, label: '?' };
   return describe(stub, { ...scene, byId });

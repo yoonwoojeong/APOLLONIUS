@@ -8,6 +8,7 @@ import { frame } from '../levels/view';
 import { isRobust, mulberry32 } from '../reasoning/robustness';
 import { GIVEN_TYPES, LIMITS, problemPoints, SOLUTION_TYPES, type Problem } from './format';
 import { sameValue, targetGoal } from './goal';
+import { has, isObj } from './objects';
 
 export type ValidationCode =
   | 'shape'
@@ -112,13 +113,10 @@ const TOP_REQUIRED = [
 ];
 const TOP_OPTIONAL = ['explain', 'author'];
 
-const isObj = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v);
 const isFiniteNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-const own = (o: object, k: PropertyKey): boolean => Object.hasOwn(o, k);
 /** True if every index of the array is present (no holes). */
 const dense = (a: unknown[]): boolean => {
-  for (let i = 0; i < a.length; i++) if (!own(a, i)) return false;
+  for (let i = 0; i < a.length; i++) if (!has(a, i)) return false;
   return true;
 };
 /**
@@ -128,7 +126,7 @@ const dense = (a: unknown[]): boolean => {
 const len = (s: string, max: number): number => (s.length > max * 2 ? s.length : [...s].length);
 /** The label the author gave `id`, if any (own properties only, never Object.prototype). */
 const labelOf = (p: Problem, id: ObjId): string | undefined =>
-  own(p.labels, id) ? p.labels[id] : undefined;
+  has(p.labels, id) ? p.labels[id] : undefined;
 
 /** A specs entry with where it sits: `step` is the 0-based solution step, or null for givens. */
 interface Located {
@@ -172,46 +170,46 @@ function checkShape(input: unknown): ValidationError[] {
     }
   }
   for (const k of TOP_REQUIRED) {
-    if (!own(input, k)) err(k, `The field "${k}" is missing.`);
+    if (!has(input, k)) err(k, `The field "${k}" is missing.`);
   }
-  if (own(input, 'format') && input.format !== 'apollonius-problem') {
+  if (has(input, 'format') && input.format !== 'apollonius-problem') {
     err('format', 'This is not an Apollonius problem file (format must be "apollonius-problem").');
   }
-  if (own(input, 'version') && input.version !== 1) {
+  if (has(input, 'version') && input.version !== 1) {
     err(
       'version',
       'This problem was made by a newer version of Apollonius (only version 1 is supported).',
     );
   }
   for (const k of ['title', 'goalText', 'explain', 'author']) {
-    if (own(input, k) && typeof input[k] !== 'string') err(k, `The ${k} must be text.`);
+    if (has(input, k) && typeof input[k] !== 'string') err(k, `The ${k} must be text.`);
   }
-  if (own(input, 'tools')) {
+  if (has(input, 'tools')) {
     const t = input.tools;
     if (!Array.isArray(t) || !dense(t) || !t.every((x) => typeof x === 'string')) {
       err('tools', 'The tools must be a list of tool names.');
     }
   }
-  if (own(input, 'labels')) {
+  if (has(input, 'labels')) {
     const l = input.labels;
     if (!isObj(l) || !Object.values(l).every((x) => typeof x === 'string')) {
       err('labels', 'The labels must map object ids to text.');
     }
   }
-  if (own(input, 'targets')) {
+  if (has(input, 'targets')) {
     const t = input.targets;
     if (!Array.isArray(t) || !dense(t) || !t.every((x) => typeof x === 'string')) {
       err('targets', 'The targets must be a list of object ids.');
     }
   }
-  if (own(input, 'par')) {
+  if (has(input, 'par')) {
     const par = input.par;
     const count = (v: unknown): boolean => Number.isInteger(v) && (v as number) >= 0;
     if (
       !isObj(par) ||
       Object.keys(par).length !== 2 ||
-      !own(par, 'L') ||
-      !own(par, 'E') ||
+      !has(par, 'L') ||
+      !has(par, 'E') ||
       !count(par.L) ||
       !count(par.E)
     ) {
@@ -223,8 +221,8 @@ function checkShape(input: unknown): ValidationError[] {
     if (
       !isObj(v) ||
       Object.keys(v).length !== 2 ||
-      !own(v, 'id') ||
-      !own(v, 'def') ||
+      !has(v, 'id') ||
+      !has(v, 'def') ||
       typeof v.id !== 'string' ||
       !isObj(v.def)
     ) {
@@ -233,7 +231,7 @@ function checkShape(input: unknown): ValidationError[] {
     }
     const def = v.def;
     const fields =
-      own(def, 'type') && typeof def.type === 'string' && own(DEF_FIELDS, def.type)
+      has(def, 'type') && typeof def.type === 'string' && has(DEF_FIELDS, def.type)
         ? DEF_FIELDS[def.type as ObjDef['type']]
         : undefined;
     if (!fields) {
@@ -241,14 +239,14 @@ function checkShape(input: unknown): ValidationError[] {
       return;
     }
     for (const k of Object.keys(def)) {
-      if (k !== 'type' && !own(fields, k))
+      if (k !== 'type' && !has(fields, k))
         err(`${path}.def.${echo(k)}`, `${name}: unknown field "${echo(k)}".`);
     }
     for (const [k, kind] of Object.entries(fields)) {
-      const fv = own(def, k) ? def[k] : undefined;
+      const fv = has(def, k) ? def[k] : undefined;
       const fp = `${path}.def.${k}`;
       if (kind === 'vec') {
-        if (!isObj(fv) || Object.keys(fv).length !== 2 || !own(fv, 'x') || !own(fv, 'y')) {
+        if (!isObj(fv) || Object.keys(fv).length !== 2 || !has(fv, 'x') || !has(fv, 'y')) {
           err(fp, `${name}: "${k}" must be a position { "x", "y" }.`);
         } else {
           for (const c of ['x', 'y']) {
@@ -267,12 +265,12 @@ function checkShape(input: unknown): ValidationError[] {
     }
   };
 
-  if (own(input, 'givens')) {
+  if (has(input, 'givens')) {
     const g = input.givens;
     if (!Array.isArray(g) || !dense(g)) err('givens', 'The givens must be a list of objects.');
     else g.forEach((v, i) => spec(v, `givens[${i}]`, `Given ${i + 1}`));
   }
-  if (own(input, 'solution')) {
+  if (has(input, 'solution')) {
     const s = input.solution;
     if (!Array.isArray(s) || !dense(s)) {
       err('solution', 'The solution must be a list of steps.');
@@ -283,10 +281,10 @@ function checkShape(input: unknown): ValidationError[] {
         if (
           !isObj(step) ||
           !Object.keys(step).every((k) => k === 'objects' || k === 'nudge') ||
-          !own(step, 'objects') ||
+          !has(step, 'objects') ||
           !Array.isArray(step.objects) ||
           !dense(step.objects) ||
-          (own(step, 'nudge') && typeof step.nudge !== 'string')
+          (has(step, 'nudge') && typeof step.nudge !== 'string')
         ) {
           err(path, `${name}: each step needs "objects" (a list) and optionally "nudge" (text).`);
           return;

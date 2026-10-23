@@ -5,8 +5,6 @@ import { describe } from '../construction/describe';
 import { evaluate } from '../construction/evaluate';
 import type { ObjId, ObjSpec, Scene } from '../construction/types';
 import { dist, sub, type Vec } from '../geometry/vec';
-import { frame } from '../levels/view';
-import { givenPoints } from '../problems/format';
 import { Magnifier } from '../canvas/Magnifier';
 import { SceneLayer, type GhostView } from '../canvas/SceneLayer';
 import { gridPattern } from '../canvas/shapes';
@@ -15,7 +13,7 @@ import { TAP_SLOP_PX } from '../canvas/gestures';
 import { useViewport } from '../canvas/useViewport';
 import { toScreen, toWorld, type Rect, type Viewport } from '../canvas/viewport';
 import { isControl, isTextEntry, stopTarget } from '../canvas/Canvas';
-import type { Editor } from './editorStore';
+import { frameOf, type Editor } from './editorStore';
 import {
   givenName,
   setupReducer,
@@ -28,9 +26,6 @@ import {
 import '../canvas/canvas.css';
 import './editor.css';
 
-/** Shown until two framing points exist: a 8 x 6 world box centred on the origin. */
-const FALLBACK_BOUNDS: Rect = { x: -4, y: -3, w: 8, h: 6 };
-const FALLBACK_DIAMETER = 10;
 let instances = 0;
 const IDLE: SetupGestureState = { mode: 'idle' };
 
@@ -75,18 +70,11 @@ function setupScene(
   givens: ObjSpec[],
   labels: Record<string, string>,
 ): { scene: Scene; bounds: Rect } {
-  const pts = ((): Vec[] => {
-    try {
-      return givenPoints(givens).filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
-    } catch {
-      return [];
-    }
-  })();
-  const f = pts.length >= 2 ? frame(pts) : null;
-  const ok = f && f.sceneDiameter > 0 && Number.isFinite(f.sceneDiameter);
-  const scene = evaluate(givens, ok ? f.sceneDiameter : FALLBACK_DIAMETER);
+  // The editor's framing of the givens alone (its fallback until two framing points exist).
+  const f = frameOf(givens, []);
+  const scene = evaluate(givens, f.sceneDiameter);
   for (const o of scene.objects) if (labels[o.id]) o.label = labels[o.id];
-  return { scene, bounds: ok ? f.view : FALLBACK_BOUNDS };
+  return { scene, bounds: f.view };
 }
 
 /** Where a given line or circle takes keyboard focus: a line's midpoint, a circle's centre. */

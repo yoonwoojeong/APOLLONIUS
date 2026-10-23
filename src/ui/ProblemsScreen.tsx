@@ -1,5 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { isTextEntry } from '../canvas/Canvas';
 import { openEditor } from '../editor/session';
 import { loadDrafts, newDraft, saveDrafts, type Draft } from '../problems/drafts';
 import type { Problem } from '../problems/format';
@@ -112,14 +113,6 @@ const copyTitle = (title: string): string => {
   const suffix = ' (copy)';
   return title ? `${title.slice(0, TITLE_MAX - suffix.length).trimEnd()}${suffix}` : '';
 };
-
-/** Typing targets keep their own Ctrl/Cmd+Z. */
-const isTextField = (t: EventTarget | null): boolean =>
-  t instanceof HTMLElement &&
-  (t.isContentEditable ||
-    t.tagName === 'INPUT' ||
-    t.tagName === 'TEXTAREA' ||
-    t.tagName === 'SELECT');
 
 interface Notice {
   key: number;
@@ -272,7 +265,8 @@ export function ProblemsScreen({ store, storage }: Props) {
       if (e.key.toLowerCase() !== 'z' || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) {
         return;
       }
-      if (isTextField(e.target) || importError) return;
+      // Typing targets keep their own Ctrl/Cmd+Z.
+      if (isTextEntry(e.target) || importError) return;
       e.preventDefault();
       undoAll();
     };

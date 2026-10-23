@@ -1,5 +1,6 @@
 import type { Stars } from '../reasoning/stars';
 import type { Problem } from './format';
+import { isObj, own } from './objects';
 
 export type DraftProblem = { format: 'apollonius-problem'; version: 1 } & Partial<
   Omit<Problem, 'format' | 'version'>
@@ -16,13 +17,7 @@ export interface Draft {
 
 export const DRAFTS_KEY = 'apollonius:problems:v1';
 
-const has = (o: object, k: string): boolean => Object.hasOwn(o, k);
-const isObj = (x: unknown): x is Record<string, unknown> =>
-  typeof x === 'object' && x !== null && !Array.isArray(x);
 const num = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
-
-/** Own-property read; undefined when the key is absent. */
-const own = (o: Record<string, unknown>, k: string): unknown => (has(o, k) ? o[k] : undefined);
 
 function parseDraft(raw: unknown): Draft | null {
   if (!isObj(raw)) return null;

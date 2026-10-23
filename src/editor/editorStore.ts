@@ -1,10 +1,12 @@
 import { computed, effect, signal, type ReadonlySignal, type Signal } from '@preact/signals';
 import { Construction } from '../construction/construction';
+import { refIds } from '../construction/refs';
 import type { ObjDef, ObjId, ObjSpec } from '../construction/types';
 import type { Vec } from '../geometry/vec';
 import type { Level, ToolId } from '../levels/types';
 import { frame } from '../levels/view';
 import { loadDrafts, saveDrafts, type Draft, type DraftProblem } from '../problems/drafts';
+import { isObj, own } from '../problems/objects';
 import { LIMITS, problemPoints, type Problem, type ProblemStep } from '../problems/format';
 import { canonicalJson, isTested, problemHash } from '../problems/hash';
 import { toLevel, type ProblemLevelId } from '../problems/load';
@@ -45,10 +47,6 @@ const FALLBACK_FRAME = { view: { x: -4, y: -3, w: 8, h: 6 }, sceneDiameter: 10 }
 
 // --- Normalising an unchecked draft --------------------------------------------------------
 
-const isObj = (x: unknown): x is Record<string, unknown> =>
-  typeof x === 'object' && x !== null && !Array.isArray(x);
-const own = (o: Record<string, unknown>, k: string): unknown =>
-  Object.hasOwn(o, k) ? o[k] : undefined;
 const str = (x: unknown): string => (typeof x === 'string' ? x : '');
 const arr = (x: unknown): unknown[] => (Array.isArray(x) ? x : []);
 const isSpec = (x: unknown): x is ObjSpec => {
@@ -133,7 +131,7 @@ function framingPoints(givens: ObjSpec[], solution: ProblemStep[]): Vec[] {
 }
 
 /** The framing the validator and loader use, with a fallback for a near-empty figure. */
-function frameOf(givens: ObjSpec[], solution: ProblemStep[]): typeof FALLBACK_FRAME {
+export function frameOf(givens: ObjSpec[], solution: ProblemStep[]): typeof FALLBACK_FRAME {
   const pts = framingPoints(givens, solution);
   if (pts.length < 2) return FALLBACK_FRAME;
   const f = frame(pts);
@@ -182,14 +180,6 @@ function solveView(givens: ObjSpec[], solution: ProblemStep[]): Level['view'] {
 
 /** A target's identity: its step's signature and its position in that step. */
 const targetKey = (stepSig: string, index: number): string => JSON.stringify([stepSig, index]);
-
-/** Ids a def refers to. */
-function refIds(def: ObjDef): ObjId[] {
-  const d = def as Record<string, unknown>;
-  return ['a', 'b', 'center', 'through', 'curve']
-    .map((k) => (Object.hasOwn(d, k) ? d[k] : undefined))
-    .filter((v): v is ObjId => typeof v === 'string');
-}
 
 function renameDef(def: ObjDef, map: Map<ObjId, ObjId>): ObjDef {
   const r = (id: ObjId): ObjId => map.get(id) ?? id;

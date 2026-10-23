@@ -23,8 +23,6 @@ interface Props {
   onMap?: () => void;
   /** Custom levels: the Map button reads Back (and `onMap` leaves the level). */
   back?: boolean;
-  /** Accessible name of the Back button (default `Back`). */
-  backLabel?: string;
   theme: Theme | undefined;
   /** Absent: no theme toggle (the editor's mode bar has one). */
   onTheme?: (t: Theme) => void;
@@ -39,7 +37,7 @@ export function TopBar(props: Props) {
       {targets && `/${targets[k]}`}
     </span>
   );
-  const backName = props.back ? (props.backLabel ?? 'Back') : 'Map';
+  const backName = props.back ? 'Back' : 'Map';
   return (
     <header class={onMap ? 'topbar' : 'topbar no-back'}>
       {onMap && (

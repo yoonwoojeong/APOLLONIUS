@@ -144,3 +144,95 @@ test('the game stays playable when localStorage throws', async ({ page }, info) 
   await page.getByRole('button', { name: 'Next' }).click();
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Perpendicular Bisector');
 });
+
+const LEVEL_IDS = [
+  'equilateral',
+  'perp-bisector',
+  'midpoint',
+  'perpendicular',
+  'angle-bisector',
+  'circle-center',
+];
+
+/** Saved progress with the first `n` levels solved and the perpendicular bisector unlocked. */
+async function seedSolved(page: Page, n: number): Promise<void> {
+  const levels = Object.fromEntries(
+    LEVEL_IDS.slice(0, n).map((id) => [id, { stars: [true, true, true], hintsUsed: 0 }]),
+  );
+  const data = JSON.stringify({ version: 1, levels, unlockedTools: ['perp-bisector'] });
+  await page.addInitScript((s) => localStorage.setItem('apollonius:v1', s), data);
+}
+
+test('level 5: circle V→A marks B′ on VB, then the bisector of A and B′', async ({
+  page,
+}, info) => {
+  const input = inputOf(info.project.name);
+  await seedSolved(page, 4);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Angle Bisector');
+
+  await selectTool(page, 3);
+  await circleFrom(page, 'V', 'A', input);
+  await expectCount(page, 'candidate', 1);
+  const [bPrime] = await candidates(page);
+  await tap(page, bPrime!, input);
+  const marked = page.locator('[data-kind="point"][data-label="C"]');
+  await expect(marked).toBeVisible();
+  await selectTool(page, 4);
+  await drag(page, await pointCenter(page, 'A'), await centerOf(marked), input);
+
+  await expect(solved(page)).toBeVisible();
+  await expect(page.locator('.topbar .counter')).toHaveText('L 2/2 · E 4/4');
+  expect(await earnedStars(page)).toEqual([true, true, true]);
+});
+
+test('level 6: three points on the circle, two bisectors, tap the centre', async ({
+  page,
+}, info) => {
+  const input = inputOf(info.project.name);
+  await seedSolved(page, 5);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Circle Center');
+
+  await selectTool(page, 1);
+  const box = (await page.locator('[data-kind="circle"]').first().boundingBox())!;
+  const c = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const r = box.width / 2;
+  for (const a of [0.3, 2.2, 4.1])
+    await tap(page, { x: c.x + r * Math.cos(a), y: c.y + r * Math.sin(a) }, input);
+  await expectCount(page, 'point', 3);
+
+  await selectTool(page, 4);
+  const pts = await Promise.all(
+    (await page.locator('[data-kind="point"]').all()).map((p) => centerOf(p)),
+  );
+  await drag(page, pts[0]!, pts[1]!, input);
+  await drag(page, pts[1]!, pts[2]!, input);
+  const [centre] = (await candidates(page)).sort((p, q) => d(p, c) - d(q, c));
+  expect(d(centre!, c)).toBeLessThan(4);
+  await tap(page, centre!, input);
+
+  await expect(solved(page)).toBeVisible();
+  await expect(page.locator('.topbar .counter')).toHaveText('L 2/2 · E 6/6');
+  expect(await earnedStars(page)).toEqual([true, true, true]);
+});
+
+test('undo after solving hides the card and the gold; redo brings them back', async ({
+  page,
+}, info) => {
+  test.skip(info.project.name !== 'desktop', 'on phones the card covers the palette');
+  await beginLevel1(page);
+  await solveLevel1(page, 'mouse');
+  await expect(solved(page)).toBeVisible();
+  await expect(page.locator('[data-kind="gold"]').first()).toBeVisible();
+
+  await page.getByRole('button', { name: 'Undo' }).click();
+  await expect(solved(page)).toBeHidden();
+  await expect(page.locator('[data-kind="gold"]')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Redo' }).click();
+  await expect(solved(page)).toBeVisible();
+  await expect(page.locator('[data-kind="gold"]').first()).toBeVisible();
+});

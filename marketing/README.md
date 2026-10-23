@@ -33,3 +33,28 @@ events with eased moves, so the magnifier shows during drags. Progress is seeded
 `localStorage['apollonius:v1']` (light theme; Level 1 marked solved to hide its coach).
 
 Set `KEEP_FRAMES=1` to keep the raw PNG frames in `marketing/out/frames/`.
+
+## Voiceover and final cut
+
+The voiceover is ElevenLabs text-to-speech (model `eleven_v4`, voice "Justin Case – Warm,
+Trustworthy, Clear"), generated in the ElevenLabs Flow "Apollonius — 30s vertical promo".
+Download the chosen take as `marketing/out/voiceover.mp3`. Script:
+
+> Can you draw a perfect triangle... with only a compass and a ruler?
+> Apollonius turns twenty-three centuries of geometry into a puzzle at your fingertips.
+> Drag to draw. Tap where curves cross. Any valid construction counts.
+> Stuck? Gentle hints show the way — and every level you master earns new tools.
+> Apollonius. Free, in your browser.
+
+Then:
+
+```sh
+marketing/assemble.sh   # → marketing/out/apollonius-30s-9x16.mp4
+```
+
+`assemble.sh` holds the edit decision list (which part of each clip plays, and how fast), delays
+the voiceover by 0.3 s, normalises loudness to −14 LUFS and burns in `captions.ass`, whose
+phrase timings match the pauses in the take. A new take or new clips mean re-timing both: find
+the pauses with
+`ffmpeg -i marketing/out/voiceover.mp3 -af silencedetect=noise=-35dB:d=0.25 -f null -`.
+Captions use the system font Inter (SemiBold/Medium).

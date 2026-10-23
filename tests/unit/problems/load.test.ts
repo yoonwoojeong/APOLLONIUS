@@ -129,9 +129,10 @@ describe('mirror-image solutions', () => {
     expect(loaded.goal(lower(loaded).scene())).not.toBeNull();
   });
 
-  test('gold is the matched variant', () => {
+  test('gold is the matched variant (the lower apex)', () => {
     const m = loaded.goal(lower(loaded).scene());
-    expect(m?.gold).toHaveLength(3);
+    const apex = m?.gold[0];
+    expect(apex && !('kind' in apex) ? apex.y : 0).toBeCloseTo(-Math.sqrt(3), 9);
   });
 
   test('a midpoint target is unaffected', () => {
@@ -141,33 +142,84 @@ describe('mirror-image solutions', () => {
     expect(l.goal(c.scene())).toBeNull();
   });
 
-  test('the variant cap holds for a reference with 10 intersections', () => {
+  /** Givens A, B; free points F0..F9 on rays from A; X_k = the far crossing of AF_k with c1. */
+  const manyCrossings = (): Problem => {
     const base = loadProblem(level1Fixture);
-    const objs: ObjSpec[] = [
-      { id: 'q1', def: { type: 'circle', center: 'A', through: 'B' } },
-      { id: 'q2', def: { type: 'circle', center: 'B', through: 'A' } },
+    const objs: ObjSpec[] = [{ id: 'q1', def: { type: 'circle', center: 'A', through: 'B' } }];
+    for (let k = 0; k < 10; k++) {
+      const ang = 0.3 + 0.25 * k;
+      objs.push(
+        {
+          id: `F${k}`,
+          def: { type: 'free-point', pos: { x: -1 + Math.cos(ang), y: Math.sin(ang) } },
+        },
+        { id: `n${k}`, def: { type: 'line', a: 'A', b: `F${k}` } },
+        { id: `X${k}`, def: { type: 'intersection', a: 'q1', b: `n${k}`, index: 0 } },
+      );
+    }
+    objs.push(
+      { id: 'T0', def: { type: 'line', a: 'X0', b: 'X1' } },
+      { id: 'T1', def: { type: 'line', a: 'X2', b: 'X3' } },
+      { id: 'T2', def: { type: 'line', a: 'X4', b: 'X5' } },
+      { id: 'u6', def: { type: 'line', a: 'X6', b: 'X7' } },
+      { id: 'u8', def: { type: 'line', a: 'X8', b: 'X9' } },
+      { id: 'T3', def: { type: 'intersection', a: 'u6', b: 'u8', index: 0 } },
+    );
+    return {
+      ...base,
+      solution: [{ objects: objs, nudge: '' }],
+      targets: ['T0', 'T1', 'T2', 'T3'],
+    };
+  };
+
+  test('the variant cap holds for a reference with 10 distinct intersections', () => {
+    const l = toLevel(manyCrossings(), 'problem:cap');
+    expect(l.goal(playReference(l).scene())).not.toBeNull();
+    const c = new Construction(l.givens, l.labels, l.sceneDiameter);
+    const t0 = performance.now();
+    expect(l.goal(c.scene())).toBeNull();
+    expect(performance.now() - t0).toBeLessThan(200);
+  });
+
+  test('a flipped variant is rejected unless a symmetry of the givens maps the targets onto it', () => {
+    const base = loadProblem(level1Fixture);
+    const givens: ObjSpec[] = [
+      ...base.givens,
+      { id: 'C', def: { type: 'given-point', pos: { x: 0, y: 1 } } },
+      { id: 'D', def: { type: 'given-point', pos: { x: 0, y: 2.5 } } },
     ];
-    const ids: string[] = [];
-    for (let i = 0; i < 10; i++) {
-      objs.push({ id: `x${i}`, def: { type: 'intersection', a: 'q1', b: 'q2', index: 0 } });
-      ids.push(`x${i}`);
-    }
-    // One target depending on every intersection through a chain of lines.
-    objs.push({ id: 'l0', def: { type: 'line', a: 'x0', b: 'x1' } });
-    for (let i = 2; i < 10; i++) {
-      objs.push({ id: `l${i - 1}`, def: { type: 'line', a: `x${i}`, b: 'x0' } });
-    }
-    const goal = toLevel(
+    const steps = (i: 0 | 1, j: 0 | 1): ObjSpec[] => [
+      { id: 'c1', def: { type: 'circle', center: 'A', through: 'B' } },
+      { id: 'c2', def: { type: 'circle', center: 'B', through: 'A' } },
+      { id: 'I', def: { type: 'intersection', a: 'c1', b: 'c2', index: i } },
+      { id: 'ln', def: { type: 'line', a: 'A', b: 'I' } },
+      { id: 'c3', def: { type: 'circle', center: 'C', through: 'D' } },
+      { id: 'J', def: { type: 'intersection', a: 'ln', b: 'c3', index: j } },
+    ];
+    const l = toLevel(
       {
         ...base,
-        solution: [{ objects: objs, nudge: '' }],
-        targets: ['l0', ...Array.from({ length: 8 }, (_, i) => `l${i + 1}`)].slice(0, 4),
+        givens,
+        labels: { ...base.labels, C: 'C', D: 'D' },
+        solution: [{ objects: steps(0, 0), nudge: '' }],
+        targets: ['J'],
       },
-      'problem:cap',
+      'problem:ij',
     );
-    const c = new Construction(goal.givens, goal.labels, goal.sceneDiameter);
-    const t0 = performance.now();
-    expect(goal.goal(c.scene())).toBeNull();
-    expect(performance.now() - t0).toBeLessThan(200);
+    const play = (i: 0 | 1, j: 0 | 1): Construction => {
+      const c = new Construction(l.givens, l.labels, l.sceneDiameter);
+      expect(c.apply({ type: 'add', objects: steps(i, j) }).ok).toBe(true);
+      return c;
+    };
+    expect(l.goal(play(0, 0).scene())).not.toBeNull();
+    for (const [i, j] of [
+      [1, 0],
+      [1, 1],
+      [0, 1],
+    ] as const) {
+      const scene = play(i, j).scene();
+      expect(scene.byId.get('J')?.value).not.toBeNull(); // J' exists, it is just not a solution
+      expect(l.goal(scene)).toBeNull();
+    }
   });
 });

@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import type { DraftProblem } from '../../../src/problems/drafts';
 import type { Problem } from '../../../src/problems/format';
 import {
   MAX_IMPORT_BYTES,
@@ -17,6 +18,14 @@ describe('exportProblem', () => {
     expect(exportProblem(level1()).filename).toBe('equilateral-triangle.apollonius.json');
     const p = { ...level1(), title: '  Ångström: Two Circles!! ' };
     expect(exportProblem(p).filename).toBe('ngstr-m-two-circles.apollonius.json');
+  });
+
+  test('exports a draft too, falling back to `problem` for a missing or empty title', () => {
+    const d: DraftProblem = { format: 'apollonius-problem', version: 1, givens: [] };
+    expect(exportProblem(d).filename).toBe('problem.apollonius.json');
+    expect(exportProblem({ ...d, title: '  ' }).filename).toBe('problem.apollonius.json');
+    expect(exportProblem({ ...d, title: 42 } as never).filename).toBe('problem.apollonius.json');
+    expect(JSON.parse(exportProblem(d).text)).toEqual(d);
   });
 
   test('writes pretty JSON that imports back to the same problem, with no id', () => {

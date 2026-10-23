@@ -1,3 +1,4 @@
+import type { DraftProblem } from './drafts';
 import type { Problem } from './format';
 
 export function canonicalJson(value: unknown): string {
@@ -29,4 +30,12 @@ function cyrb53(str: string, seed = 0): number {
 
 export function problemHash(p: Problem): string {
   return cyrb53(canonicalJson(p)).toString(36).padStart(14, '0');
+}
+
+/**
+ * Whether a draft's stored `testedHash` still matches its problem. The editor and My problems
+ * both ask through here, so a problem tested in one shows as tested in the other.
+ */
+export function isTested(testedHash: string | undefined, p: Problem | DraftProblem): boolean {
+  return testedHash !== undefined && testedHash === problemHash(p as Problem);
 }

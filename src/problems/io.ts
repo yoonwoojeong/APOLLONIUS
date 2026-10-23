@@ -1,4 +1,4 @@
-import { slugify } from './drafts';
+import { slugify, type DraftProblem } from './drafts';
 import type { Problem } from './format';
 import { validate, type ValidationResult } from './validate';
 
@@ -10,10 +10,14 @@ const fail = (code: 'shape' | 'limit', message: string): ValidationResult => ({
   errors: [{ code, path: '', message }],
 });
 
-/** A problem as a downloadable file: `<slug>.apollonius.json`, pretty-printed. */
-export function exportProblem(p: Problem): { filename: string; text: string } {
+/**
+ * A problem — or a draft that doesn't validate yet — as a downloadable file:
+ * `<slug>.apollonius.json`, pretty-printed. A missing or empty title is named `problem`.
+ */
+export function exportProblem(p: Problem | DraftProblem): { filename: string; text: string } {
+  const title: unknown = p.title;
   return {
-    filename: `${slugify(p.title)}.apollonius.json`,
+    filename: `${slugify(typeof title === 'string' ? title : '')}.apollonius.json`,
     text: `${JSON.stringify(p, null, 2)}\n`,
   };
 }

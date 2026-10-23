@@ -3,7 +3,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'preact/hook
 import { openEditor } from '../editor/session';
 import { loadDrafts, newDraft, saveDrafts, type Draft } from '../problems/drafts';
 import type { Problem } from '../problems/format';
-import { problemHash } from '../problems/hash';
+import { isTested } from '../problems/hash';
 import { exportProblem, importProblemFile } from '../problems/io';
 import { toLevel } from '../problems/load';
 import { validate } from '../problems/validate';
@@ -40,6 +40,8 @@ interface Row {
 
 export const TOAST_MS = 5000;
 const SAVE_WARNING = "Couldn't save drafts on this device.";
+export const EXPORT_INVALID_NOTE =
+  "This problem isn't valid yet — the file won't import until it passes the checks.";
 const TITLE_MAX = 40;
 /** Errors shown in the import dialog before "and N more". */
 const ERRORS_SHOWN = 8;
@@ -51,9 +53,10 @@ function rowOf(draft: Draft): Row {
   if (!row) {
     const v = validate(draft.problem);
     const problem = v.ok ? v.problem : null;
+    // Hashed exactly as the editor hashes it (the stored draft problem), via the shared helper.
     const status: Status = !problem
       ? 'Draft'
-      : draft.testedHash !== undefined && draft.testedHash === problemHash(problem)
+      : isTested(draft.testedHash, draft.problem)
         ? 'Tested'
         : 'Valid';
     const title = typeof draft.problem.title === 'string' ? draft.problem.title.trim() : '';
@@ -66,8 +69,8 @@ function rowOf(draft: Draft): Row {
 const newestFirst = (a: Draft, b: Draft): number =>
   b.updatedAt - a.updatedAt || b.createdAt - a.createdAt;
 
-/** Stores whose last Play could not save its stars (the screen was closed at the time). */
-const playUnsaved = new WeakSet<Store>();
+/** Stores whose last background save (a Play's stars, a late import) failed while closed. */
+const unsavedFor = new WeakSet<Store>();
 
 /** Merges a Play's stars into the stored draft; progress is never touched. */
 function saveStars(store: Store, storage: Storage | null, localId: string, s: Stars): void {
@@ -76,7 +79,7 @@ function saveStars(store: Store, storage: Storage | null, localId: string, s: St
   if (i < 0) return;
   const old = all[i]!.stars;
   all[i] = { ...all[i]!, stars: old ? mergeStars(old, s) : s };
-  if (!saveDrafts(storage, all)) playUnsaved.add(store);
+  if (!saveDrafts(storage, all)) unsavedFor.add(store);
 }
 
 function download(filename: string, text: string): void {
@@ -96,15 +99,32 @@ const copyTitle = (title: string): string => {
   return title ? `${title.slice(0, TITLE_MAX - suffix.length).trimEnd()}${suffix}` : '';
 };
 
-interface Toast {
+/** Typing targets keep their own Ctrl/Cmd+Z. */
+const isTextField = (t: EventTarget | null): boolean =>
+  t instanceof HTMLElement &&
+  (t.isContentEditable ||
+    t.tagName === 'INPUT' ||
+    t.tagName === 'TEXTAREA' ||
+    t.tagName === 'SELECT');
+
+interface Notice {
   key: number;
   text: string;
-  undo?: () => void;
+}
+
+/** A delete that Undo can still take back. */
+interface Pending {
+  draft: Draft;
+  /** Its index in the stored list when it was deleted. */
+  at: number;
+  /** The card that took its place on screen (focus returns there), if any. */
+  neighbour: string | null;
+  name: string;
 }
 
 interface ImportError {
   file: string;
-  messages: string[];
+  errors: { path: string; message: string }[];
 }
 
 /**
@@ -117,25 +137,33 @@ export function ProblemsScreen({ store, storage }: Props) {
   /** The latest list, for handlers that run after a later render (Undo, an import). */
   const current = useRef(drafts);
   current.current = drafts;
-  const [saveFailed, setSaveFailed] = useState(() => playUnsaved.has(store));
-  const [toast, setToast] = useState<Toast | null>(null);
+  const [saveFailed, setSaveFailed] = useState(() => unsavedFor.has(store));
+  const failedRef = useRef(saveFailed);
+  failedRef.current = saveFailed;
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [pending, setPending] = useState<Pending[]>([]);
+  const pendingRef = useRef(pending);
+  pendingRef.current = pending;
+  /** Bumped on every delete, so the undo toast's 5 s start again. */
+  const [undoKey, setUndoKey] = useState(0);
   const [importError, setImportError] = useState<ImportError | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const importBtn = useRef<HTMLButtonElement>(null);
-  const list = useRef<HTMLDivElement>(null);
   /** A selector to focus after the next render (actions that add or remove cards). */
   const focusNext = useRef<string | null>(null);
-  const toastKey = useRef(0);
+  const noticeKey = useRef(0);
+  const mounted = useRef(true);
 
   useEffect(() => {
-    playUnsaved.delete(store);
+    unsavedFor.delete(store);
+    mounted.current = true;
+    return () => void (mounted.current = false);
   }, [store]);
 
   useLayoutEffect(() => {
     const sel = focusNext.current;
     if (!sel) return;
     focusNext.current = null;
-    list.current?.querySelector<HTMLElement>(sel)?.focus({ preventScroll: false });
+    document.querySelector<HTMLElement>(sel)?.focus();
   });
 
   const sorted = [...drafts].sort(newestFirst).map(rowOf);
@@ -145,9 +173,14 @@ export function ProblemsScreen({ store, storage }: Props) {
     setDrafts(next);
     setSaveFailed(!saveDrafts(storage, next));
   };
-  const showToast = (text: string, undo?: () => void): void =>
-    setToast({ key: ++toastKey.current, text, ...(undo ? { undo } : {}) });
+  const showNotice = (text: string): void => setNotice({ key: ++noticeKey.current, text });
   const openSel = (localId: string): string => `[data-open="${localId}"]`;
+  /** Where focus goes when the undo toast closes under it: the neighbour, a card, the heading. */
+  const afterToastSel = (neighbour: string | null): string => {
+    const ids = new Set(current.current.map((d) => d.localId));
+    if (neighbour && ids.has(neighbour)) return openSel(neighbour);
+    return ids.size ? '.pb-open' : '.pb-title';
+  };
 
   const create = (): void => {
     openEditor(store, storage, newDraft(Date.now(), Math.random));
@@ -167,38 +200,70 @@ export function ProblemsScreen({ store, storage }: Props) {
   };
 
   const duplicate = (row: Row): void => {
-    const now = Date.now();
-    const fresh = newDraft(now, Math.random);
+    const fresh = newDraft(Date.now(), Math.random);
     const problem = structuredClone(row.draft.problem);
     if (typeof problem.title === 'string') problem.title = copyTitle(problem.title.trim());
     const copy: Draft = { ...fresh, problem };
     commit([...current.current, copy]);
     focusNext.current = openSel(copy.localId);
-    showToast(`Made a copy of “${row.name}”.`);
+    showNotice(`Made a copy of “${row.name}”.`);
   };
 
-  const remove = (row: Row): void => {
-    const at = drafts.indexOf(row.draft);
-    const next = drafts.filter((d) => d !== row.draft);
-    // Focus moves to the card that takes this one's place, else the one before, else New.
+  /** Deletes at once; Undo (button or Ctrl/Cmd+Z) brings back every pending delete. */
+  const remove = (row: Row, byKeyboard: boolean): void => {
+    const list = current.current;
+    const at = list.indexOf(row.draft);
     const pos = sorted.indexOf(row);
-    const neighbour = sorted[pos + 1] ?? sorted[pos - 1];
-    focusNext.current = neighbour ? openSel(neighbour.draft.localId) : '[data-new]';
-    commit(next);
-    showToast(`Deleted “${row.name}”.`, () => {
-      const cur = current.current;
-      if (cur.some((d) => d.localId === row.draft.localId)) return;
-      const restored = [...cur];
-      restored.splice(Math.min(at, restored.length), 0, row.draft);
-      focusNext.current = openSel(row.draft.localId);
-      commit(restored);
-    });
+    const neighbour = (sorted[pos + 1] ?? sorted[pos - 1])?.draft.localId ?? null;
+    commit(list.filter((d) => d !== row.draft));
+    setPending((p) => [...p, { draft: row.draft, at, neighbour, name: row.name }]);
+    setUndoKey((k) => k + 1);
+    // Keyboard users go straight to Undo (it holds the toast while focused); pointer users stay
+    // in the list, on the card that took this one's place.
+    focusNext.current = byKeyboard ? '[data-undo]' : neighbour ? openSel(neighbour) : '[data-new]';
   };
+
+  const undoAll = (): void => {
+    const stack = pendingRef.current;
+    if (!stack.length) return;
+    const restored = [...current.current];
+    for (const p of [...stack].reverse()) {
+      if (restored.some((d) => d.localId === p.draft.localId)) continue;
+      restored.splice(Math.min(p.at, restored.length), 0, p.draft);
+    }
+    pendingRef.current = [];
+    setPending([]);
+    focusNext.current = openSel(stack[stack.length - 1]!.draft.localId);
+    commit(restored);
+  };
+
+  /** The undo toast timed out or was dismissed: the deletes stand. */
+  const closeUndo = (focusWasInside: boolean): void => {
+    const stack = pendingRef.current;
+    if (focusWasInside)
+      focusNext.current = afterToastSel(stack[stack.length - 1]?.neighbour ?? null);
+    pendingRef.current = [];
+    setPending([]);
+  };
+
+  useEffect(() => {
+    if (!pending.length) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key.toLowerCase() !== 'z' || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) {
+        return;
+      }
+      if (isTextField(e.target) || importError) return;
+      e.preventDefault();
+      undoAll();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pending.length > 0, importError]);
 
   const exportRow = (row: Row): void => {
-    if (!row.problem) return;
-    const { filename, text } = exportProblem(row.problem);
+    const { filename, text } = exportProblem(row.problem ?? row.draft.problem);
     download(filename, text);
+    if (!row.problem) showNotice(EXPORT_INVALID_NOTE);
   };
 
   const onFile = async (e: Event): Promise<void> => {
@@ -209,21 +274,36 @@ export function ProblemsScreen({ store, storage }: Props) {
     if (!file) return;
     const r = await importProblemFile(file);
     if (!r.ok) {
-      setImportError({
-        file: (file as Partial<File>).name ?? 'this file',
-        messages: [...new Set(r.errors.map((x) => x.message))],
+      if (!mounted.current) return;
+      const seen = new Set<string>();
+      const errors = r.errors.filter((x) => {
+        const k = `${x.path}\u0000${x.message}`;
+        return !seen.has(k) && !!seen.add(k);
       });
+      setImportError({ file: (file as Partial<File>).name ?? 'this file', errors });
       return;
     }
     const d: Draft = { ...newDraft(Date.now(), Math.random), problem: r.problem };
+    // Appended to what is stored now: the list may have changed while the file was read.
+    // (After a failed save the stored list is stale, so the screen's own list is the truth.)
+    const base = storage && !failedRef.current ? loadDrafts(storage) : current.current;
+    const next = [...base, d];
+    const ok = saveDrafts(storage, next);
+    if (!mounted.current) {
+      if (!ok) unsavedFor.add(store);
+      return;
+    }
+    current.current = next;
+    setDrafts(next);
+    setSaveFailed(!ok);
     focusNext.current = openSel(d.localId);
-    commit([...current.current, d]);
-    showToast(`Imported “${r.problem.title}”.`);
+    showNotice(`Imported “${r.problem.title}”.`);
   };
 
   const closeImportError = (): void => {
     setImportError(null);
-    importBtn.current?.focus();
+    // After the render, once the rest of the page is no longer inert.
+    focusNext.current = '[data-import]';
   };
 
   const n = drafts.length;
@@ -233,16 +313,18 @@ export function ProblemsScreen({ store, storage }: Props) {
         <PlusIcon />
         New problem
       </button>
-      <button ref={importBtn} type="button" class="btn" onClick={() => fileInput.current?.click()}>
+      <button type="button" class="btn" data-import onClick={() => fileInput.current?.click()}>
         <UploadIcon />
         Import
       </button>
     </div>
   );
+  const undoText =
+    pending.length === 1 ? `Deleted “${pending[0]!.name}”.` : `Deleted ${pending.length} problems.`;
 
   return (
     <>
-      <main class="pb" inert={importError !== null}>
+      <main class="pb">
         <header class="pb-head">
           <button
             type="button"
@@ -254,7 +336,9 @@ export function ProblemsScreen({ store, storage }: Props) {
             <BackIcon />
           </button>
           <div class="pb-head-text">
-            <h1 class="pb-title">My problems</h1>
+            <h1 class="pb-title" tabIndex={-1}>
+              My problems
+            </h1>
             <p class="pb-summary">
               {n === 0 ? 'Puzzles you make' : `${n} ${n === 1 ? 'problem' : 'problems'}`} · saved on
               this device
@@ -266,7 +350,7 @@ export function ProblemsScreen({ store, storage }: Props) {
           {saveFailed ? SAVE_WARNING : ''}
         </p>
 
-        <div class="pb-body" ref={list}>
+        <div class="pb-body">
           {n > 0 && actions}
           {n === 0 ? (
             <section class="pb-empty" aria-labelledby="pb-empty-title">
@@ -290,7 +374,7 @@ export function ProblemsScreen({ store, storage }: Props) {
                   onPlay={() => play(row)}
                   onDuplicate={() => duplicate(row)}
                   onExport={() => exportRow(row)}
-                  onDelete={() => remove(row)}
+                  onDelete={(byKeyboard) => remove(row, byKeyboard)}
                 />
               ))}
             </ul>
@@ -309,7 +393,20 @@ export function ProblemsScreen({ store, storage }: Props) {
         />
       </main>
 
-      <ToastRegion toast={toast} onDone={() => setToast(null)} />
+      {/* Always mounted, so each toast is announced. */}
+      <div class="pb-toast-region" aria-live="polite">
+        {notice && (
+          <ToastItem key={`n${notice.key}`} text={notice.text} onClose={() => setNotice(null)} />
+        )}
+        {pending.length > 0 && (
+          <ToastItem
+            key={`u${undoKey}`}
+            text={undoText}
+            onClose={closeUndo}
+            action={{ label: 'Undo', run: undoAll }}
+          />
+        )}
+      </div>
 
       {importError && (
         <Dialog
@@ -322,12 +419,15 @@ export function ProblemsScreen({ store, storage }: Props) {
           }
         >
           <ul class="pb-errors">
-            {importError.messages.slice(0, ERRORS_SHOWN).map((m) => (
-              <li key={m}>{m}</li>
+            {importError.errors.slice(0, ERRORS_SHOWN).map((x) => (
+              <li key={`${x.path}\u0000${x.message}`}>
+                {x.path && <span class="pb-err-path">{x.path}</span>}
+                {x.message}
+              </li>
             ))}
           </ul>
-          {importError.messages.length > ERRORS_SHOWN && (
-            <p class="pb-errors-more">…and {importError.messages.length - ERRORS_SHOWN} more.</p>
+          {importError.errors.length > ERRORS_SHOWN && (
+            <p class="pb-errors-more">…and {importError.errors.length - ERRORS_SHOWN} more.</p>
           )}
         </Dialog>
       )}
@@ -341,7 +441,8 @@ function ProblemCard(p: {
   onPlay: () => void;
   onDuplicate: () => void;
   onExport: () => void;
-  onDelete: () => void;
+  /** `byKeyboard`: the press came from Enter/Space (a click with no pointer detail). */
+  onDelete: (byKeyboard: boolean) => void;
 }) {
   const { row } = p;
   const { draft, name, status } = row;
@@ -396,12 +497,15 @@ function ProblemCard(p: {
           <IconButton label={`Duplicate ${q}`} tip="Duplicate" onClick={p.onDuplicate}>
             <CopyIcon />
           </IconButton>
-          {row.problem && (
-            <IconButton label={`Export ${q}`} tip="Export file" onClick={p.onExport}>
-              <DownloadIcon />
-            </IconButton>
-          )}
-          <IconButton label={`Delete ${q}`} tip="Delete" onClick={p.onDelete} danger>
+          <IconButton label={`Export ${q}`} tip="Export file" onClick={p.onExport}>
+            <DownloadIcon />
+          </IconButton>
+          <IconButton
+            label={`Delete ${q}`}
+            tip="Delete"
+            onClick={(e) => p.onDelete(e.detail === 0)}
+            danger
+          >
             <TrashIcon />
           </IconButton>
         </span>
@@ -413,7 +517,7 @@ function ProblemCard(p: {
 function IconButton(p: {
   label: string;
   tip: string;
-  onClick: () => void;
+  onClick: (e: MouseEvent) => void;
   danger?: boolean;
   children: ComponentChildren;
 }) {
@@ -443,60 +547,87 @@ function EmptyFigure() {
 }
 
 /**
- * The toast slot: an always-mounted polite live region. A toast stays 5 s; hovering or
- * focusing it holds it, and leaving starts the 5 s again.
+ * One toast. It closes after 5 s; hovering or focusing it holds it, and leaving starts the 5 s
+ * again. Esc dismisses it. `onClose` is told whether focus was inside it.
  */
-function ToastRegion({ toast, onDone }: { toast: Toast | null; onDone: () => void }) {
-  const [held, setHeld] = useState(false);
+function ToastItem(p: {
+  text: string;
+  onClose: (focusWasInside: boolean) => void;
+  action?: { label: string; run: () => void };
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const close = (): void => p.onClose(!!ref.current?.contains(document.activeElement));
   useEffect(() => {
-    if (!toast || held) return;
-    const t = setTimeout(onDone, TOAST_MS);
+    if (hovered || focused) return;
+    const t = setTimeout(close, TOAST_MS);
     return () => clearTimeout(t);
-  }, [toast, held]);
-  // A new toast starts unheld.
-  useEffect(() => setHeld(false), [toast?.key]);
+  }, [hovered, focused]);
   return (
-    <div class="pb-toast-region" aria-live="polite">
-      {toast && (
-        <div
-          key={toast.key}
-          class="pb-toast"
-          onMouseEnter={() => setHeld(true)}
-          onMouseLeave={() => setHeld(false)}
-          onFocusIn={() => setHeld(true)}
-          onFocusOut={() => setHeld(false)}
-        >
-          <span class="pb-toast-text">{toast.text}</span>
-          {toast.undo && (
-            <button
-              type="button"
-              class="btn pb-toast-undo"
-              onClick={() => {
-                toast.undo!();
-                onDone();
-              }}
-            >
-              Undo
-            </button>
-          )}
-        </div>
+    <div
+      ref={ref}
+      class="pb-toast"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocusIn={() => setFocused(true)}
+      onFocusOut={(e) => {
+        if (!ref.current?.contains(e.relatedTarget as Node | null)) setFocused(false);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          close();
+        }
+      }}
+    >
+      <span class="pb-toast-text">{p.text}</span>
+      {p.action && (
+        <button type="button" class="btn pb-toast-action" data-undo onClick={p.action.run}>
+          {p.action.label}
+        </button>
       )}
     </div>
   );
 }
 
-/** A small modal dialog: focus moves in, Tab stays inside, Esc or the scrim closes it. */
+/** Marks everything outside `el` inert (each ancestor's other children); returns the undo. */
+function inertOutside(el: HTMLElement): () => void {
+  const marked: Element[] = [];
+  for (
+    let node: HTMLElement | null = el;
+    node && node !== document.body;
+    node = node.parentElement
+  ) {
+    for (const sib of node.parentElement?.children ?? []) {
+      if (sib === node || sib.hasAttribute('inert')) continue;
+      sib.setAttribute('inert', '');
+      marked.push(sib);
+    }
+  }
+  return () => marked.forEach((m) => m.removeAttribute('inert'));
+}
+
+/**
+ * A small modal dialog: the rest of the page goes inert, focus moves in, Tab stays inside, and
+ * Esc or the scrim closes it.
+ */
 function Dialog(p: {
   title: string;
   description: ComponentChildren;
   onClose: () => void;
   children: ComponentChildren;
 }) {
+  const scrim = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   const ok = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   const descId = useId();
-  useEffect(() => ok.current?.focus(), []);
+  useLayoutEffect(() => {
+    const restore = scrim.current ? inertOutside(scrim.current) : () => {};
+    ok.current?.focus();
+    return restore;
+  }, []);
   const onKey = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -518,7 +649,7 @@ function Dialog(p: {
     }
   };
   return (
-    <div class="pb-scrim" onClick={(e) => e.target === e.currentTarget && p.onClose()}>
+    <div ref={scrim} class="pb-scrim" onClick={(e) => e.target === e.currentTarget && p.onClose()}>
       <div
         ref={ref}
         class="pb-dialog"

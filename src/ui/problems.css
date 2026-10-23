@@ -300,7 +300,9 @@
   bottom: calc(16px + env(safe-area-inset-bottom));
   z-index: 20;
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   padding: 0 16px;
   pointer-events: none;
 }
@@ -324,23 +326,24 @@
 .pb-toast-text {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding: 8px 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
-.btn.pb-toast-undo {
+.btn.pb-toast-action {
   flex: none;
   border-color: transparent;
   color: var(--bg);
   font-weight: 650;
 }
 
-.btn.pb-toast-undo:hover {
+.btn.pb-toast-action:hover {
   background: color-mix(in srgb, var(--bg) 14%, transparent);
 }
 
-.btn.pb-toast-undo:focus-visible {
+.btn.pb-toast-action:focus-visible {
   outline-color: var(--bg);
 }
 
@@ -429,6 +432,15 @@
   height: 7px;
   border: 1.5px solid var(--invalid);
   border-radius: 50%;
+}
+
+.pb-err-path {
+  display: block;
+  margin-bottom: 1px;
+  color: var(--muted);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
 }
 
 .pb-errors-more {

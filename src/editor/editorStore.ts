@@ -6,7 +6,7 @@ import type { Level, ToolId } from '../levels/types';
 import { frame } from '../levels/view';
 import { loadDrafts, saveDrafts, type Draft, type DraftProblem } from '../problems/drafts';
 import { LIMITS, problemPoints, type Problem, type ProblemStep } from '../problems/format';
-import { canonicalJson, problemHash } from '../problems/hash';
+import { canonicalJson, isTested, problemHash } from '../problems/hash';
 import { toLevel, type ProblemLevelId } from '../problems/load';
 import { validate } from '../problems/validate';
 import { mergeStars, type Stars } from '../reasoning/stars';
@@ -317,10 +317,7 @@ export function createEditor(
   });
 
   const validation = computed(() => validate(problem.value));
-  const tested = computed(
-    () =>
-      testedHash.value !== undefined && testedHash.value === problemHash(problem.value as Problem),
-  );
+  const tested = computed(() => isTested(testedHash.value, problem.value));
   const modeDone = computed((): Record<EditorMode, boolean> => {
     const p = problem.value;
     return {

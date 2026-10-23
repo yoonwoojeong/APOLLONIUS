@@ -1,0 +1,27 @@
+[Script Info]
+; Burned-in captions for the 30-second vertical promo (timed to marketing/out/voiceover.mp3 + 0.3 s).
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Caption,Inter SemiBold,60,&H00EEF4F7,&H00EEF4F7,&H1A302B2B,&H00000000,0,0,0,0,100,100,0,0,3,26,0,8,110,110,340,1
+Style: CardLine,Inter Medium,50,&H00302B2B,&H00302B2B,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,80,80,0,1
+Style: CardUrl,Inter SemiBold,46,&H0041A4D9,&H0041A4D9,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,5,80,80,0,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.30,0:00:02.20,Caption,,0,0,0,,Can you draw a perfect triangle…
+Dialogue: 0,0:00:02.40,0:00:04.35,Caption,,0,0,0,,…with only a compass and a ruler?
+Dialogue: 0,0:00:04.70,0:00:07.15,Caption,,0,0,0,,Apollonius turns 23 centuries of geometry
+Dialogue: 0,0:00:07.15,0:00:09.60,Caption,,0,0,0,,into a puzzle at your fingertips.
+Dialogue: 0,0:00:09.90,0:00:11.05,Caption,,0,0,0,,Drag to draw.
+Dialogue: 0,0:00:11.10,0:00:12.75,Caption,,0,0,0,,Tap where curves cross.
+Dialogue: 0,0:00:12.85,0:00:14.75,Caption,,0,0,0,,Any valid construction counts.
+Dialogue: 0,0:00:14.95,0:00:17.20,Caption,,0,0,0,,Stuck? Gentle hints show the way
+Dialogue: 0,0:00:17.25,0:00:19.95,Caption,,0,0,0,,and every level you master earns new tools.
+Dialogue: 0,0:00:20.60,0:00:25.50,CardLine,,0,0,0,,{\pos(540,1260)\fad(300,0)}Free, in your browser
+Dialogue: 0,0:00:21.10,0:00:25.50,CardUrl,,0,0,0,,{\pos(540,1350)\fad(300,0)}yoonwoojeong.github.io/APOLLONIUS

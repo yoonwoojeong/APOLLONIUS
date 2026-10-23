@@ -1,5 +1,9 @@
 # Apollonius
 
+[![CI and deploy](https://github.com/yoonwoojeong/APOLLONIUS/actions/workflows/deploy.yml/badge.svg)](https://github.com/yoonwoojeong/APOLLONIUS/actions/workflows/deploy.yml)
+
+**Play:** https://yoonwoojeong.github.io/APOLLONIUS/
+
 Apollonius is a compass-and-straightedge geometry puzzle game for the browser, inspired by
 Euclidea. Across six levels you construct an equilateral triangle, perpendicular bisectors,
 midpoints, perpendiculars, angle bisectors and a circle's centre using only lines, circles and
@@ -32,6 +36,11 @@ chromium` (this repository's development environment already provides it).
 
 `dist/` is a fully static site with relative asset URLs and self-hosted fonts, so it can be
 served from any host and any path (for example `https://example.com/games/apollonius/`).
+
+The `CI and deploy` workflow (`.github/workflows/deploy.yml`) runs typecheck, lint, unit tests,
+end-to-end tests and the build on every pull request and push. Pushes to `main` that pass are
+published to GitHub Pages. One-time setup: in the repository's Settings → Pages, set
+**Source** to **GitHub Actions**.
 
 ## Project structure
 

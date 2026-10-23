@@ -35,7 +35,7 @@ async function newProblem(page: Page): Promise<void> {
   await expect(setupCanvas(page)).toBeVisible();
 }
 
-/** Setup: places A and B (and D far to the right when `far`), then the segment AB. */
+/** Setup: places A and B (and C far to the right when `far`), then the segment AB. */
 async function setupAB(page: Page, input: Input, far = false): Promise<void> {
   await tap(page, await at(page, 0.3, 0.6), input);
   await expectCount(page, 'point', 1);
@@ -50,26 +50,31 @@ async function setupAB(page: Page, input: Input, far = false): Promise<void> {
   await expectCount(page, 'line', 1);
 }
 
-/** The equilateral construction: circles A→B and B→A, the upper crossing C, lines CA and CB. */
-async function equilateral(page: Page, input: Input): Promise<void> {
+/**
+ * The equilateral construction: circles A→B and B→A, the upper crossing (labelled `apex`: C, or
+ * D when the figure already has a C), then lines from it to A and B.
+ */
+async function equilateral(page: Page, input: Input, apex = 'C'): Promise<void> {
   await selectTool(page, 3);
   await circleFrom(page, 'A', 'B', input);
   await expectCount(page, 'circle', 1);
   await circleFrom(page, 'B', 'A', input);
   await expectCount(page, 'circle', 2);
+  await expectCount(page, 'candidate', 2);
+  await expect(page.locator('[data-kind="candidate"]').first()).toBeVisible();
   const [top] = await candidates(page);
   await tap(page, top!, input);
-  await expect(page.locator('[data-kind="point"][data-label="C"]')).toBeVisible();
+  await expect(page.locator(`[data-kind="point"][data-label="${apex}"]`)).toBeVisible();
   await selectTool(page, 2);
-  await drag(page, await pointCenter(page, 'C'), await pointCenter(page, 'A'), input);
-  await drag(page, await pointCenter(page, 'C'), await pointCenter(page, 'B'), input);
+  await drag(page, await pointCenter(page, apex), await pointCenter(page, 'A'), input);
+  await drag(page, await pointCenter(page, apex), await pointCenter(page, 'B'), input);
 }
 
 /** Solve: the construction, then ☆ on both lines (steps 4 and 5). */
-async function solveAndMark(page: Page, input: Input): Promise<void> {
+async function solveAndMark(page: Page, input: Input, apex = 'C'): Promise<void> {
   await tab(page, 'Solve').click();
   await expect(page.getByTestId('canvas')).toBeVisible();
-  await equilateral(page, input);
+  await equilateral(page, input, apex);
   await expect(page.locator('.step-row')).toHaveCount(5);
   for (const n of [4, 5]) {
     const star = page.getByRole('button', { name: new RegExp(`^Step ${n} target:`) });
@@ -136,7 +141,9 @@ test('author, test-play, export, import and play a problem; progress untouched',
   await file.saveAs(path);
 
   // Import that file: a second card appears, and Play completes it.
-  await page.locator('input[type="file"]').setInputFiles(path);
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: 'Import' }).click();
+  await (await chooser).setFiles(path);
   await expect(page.locator('.pb-toast-region')).toContainText(`Imported “${TITLE}”.`);
   await expect(card).toHaveCount(2);
   await page
@@ -167,9 +174,9 @@ test('a crossing too close to a point blocks Play test until it is moved', async
   const input = inputOf(info.project.name);
   await page.goto('/');
   await newProblem(page);
-  // D far to the right fixes the scale, so moving B next to A packs the crossing near A.
+  // C far to the right fixes the scale, so moving B next to A packs the crossing (D) near A.
   await setupAB(page, input, true);
-  await solveAndMark(page, input);
+  await solveAndMark(page, input, 'D');
   await fillDetails(page);
 
   await tab(page, 'Setup').click();
@@ -180,19 +187,32 @@ test('a crossing too close to a point blocks Play test until it is moved', async
   await drag(page, b, near, input);
 
   await tab(page, 'Test').click();
-  // C is as far from A as from B: either may be named as the nearest point.
+  // D is as far from A as from B: either may be named as the nearest point.
   const error = page.locator('.check-row.is-error', { hasText: /too close to point [AB] / });
   await expect(error).toHaveCount(1);
   await expect(error).toContainText(/Step 3: .* move [AB] or pick another construction\./);
   const play = page.getByRole('button', { name: 'Play test' });
   await expect(play).toHaveAttribute('aria-disabled', 'true');
   await play.dispatchEvent('click');
+  // Nothing opens: still in Test, with the reason shown and no game canvas.
+  await page.waitForTimeout(200);
+  await expect(tab(page, 'Test')).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.test-reason')).toBeVisible();
   await expect(page.getByTestId('canvas')).toHaveCount(0);
   await expect(page.locator('.test-reason')).toHaveText(/Fix \d+ problems? below to play\./);
 
   // Moving B back clears it.
   await tab(page, 'Setup').click();
-  await drag(page, await pointCenter(page, 'B'), b, input);
+  // Setup refits when it remounts, so B's old page position means nothing now: re-read A and C
+  // and put B back about as far from A as it started (0.45 of the way from A towards C in x).
+  const a2 = await pointCenter(page, 'A');
+  const c2 = await pointCenter(page, 'C');
+  await drag(
+    page,
+    await pointCenter(page, 'B'),
+    { x: a2.x + (c2.x - a2.x) * 0.45, y: a2.y },
+    input,
+  );
   await tab(page, 'Test').click();
   await expect(page.locator('.checks .check-row.is-ok')).toHaveText('Ready to test');
   await expect(play).toHaveAttribute('aria-disabled', 'false');

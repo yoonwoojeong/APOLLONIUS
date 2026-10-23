@@ -1,6 +1,7 @@
 import { evaluate } from '../construction/evaluate';
 import type { ObjDef, ObjId, ObjSpec, Scene, SceneObject, Value } from '../construction/types';
 import { eqCurve, eqPoint, type Curve } from '../geometry/curves';
+import { intersect } from '../geometry/intersect';
 import type { Vec } from '../geometry/vec';
 import { isCurve, isPoint } from '../levels/goals';
 import type { Level } from '../levels/types';
@@ -38,46 +39,93 @@ function sameValue(a: Value, b: Value, tol: number): boolean {
   return false;
 }
 
+/** Upper bound on explored placeholder assignments, to keep hint lookup cheap. */
+const SEARCH_LIMIT = 500;
+
+interface MapState {
+  mapping: Map<ObjId, ObjId>;
+  overrides: Map<ObjId, ObjDef>;
+  ref: Scene;
+}
+
 /**
- * Maps reference objects to player objects one-to-one. Givens map to themselves;
- * `free-point` / `on-curve` reference points are placeholders for any player point of the
- * same kind (on the same mapped curve), and the reference is re-evaluated at the player's
- * position so downstream objects match the player's own construction.
+ * Maps reference objects to player objects one-to-one, by geometric equality (§7.3).
+ * Givens map to themselves. Some reference objects stand for a choice the player makes:
+ * `free-point` / `on-curve` points are placeholders for any player point of the same kind
+ * (on the same mapped curve), and an `intersection` also accepts the other intersection of
+ * its two curves. Each such choice overrides the reference def and re-evaluates it, so
+ * downstream objects follow the player's own construction. Choices are searched (bounded)
+ * for the assignment that maps the most reference objects; ties keep player order.
  */
-function mapReference(level: Level, scene: Scene): { mapping: Map<ObjId, ObjId>; ref: Scene } {
+function mapReference(level: Level, scene: Scene): MapState {
   const givenSpecs: ObjSpec[] = scene.objects
     .filter((o) => o.given)
     .map((o) => ({ id: o.id, def: o.def }));
-  const specs = [...givenSpecs, ...level.reference.flatMap((s) => s.objects)];
-  const overrides = new Map<ObjId, ObjDef>();
-  let ref = evaluate(specs, level.sceneDiameter);
-  const mapping = new Map<ObjId, ObjId>(givenSpecs.map((g) => [g.id, g.id]));
-  const used = new Set<ObjId>(mapping.values());
-  const free = (pred: (o: SceneObject) => boolean): SceneObject | undefined =>
-    scene.objects.find((o) => !used.has(o.id) && o.value !== null && pred(o));
+  const refSpecs = level.reference.flatMap((s) => s.objects);
+  const specs = [...givenSpecs, ...refSpecs];
+  const players = scene.objects.filter((o) => !o.given && o.value !== null);
 
-  for (const step of level.reference) {
-    for (const { id, def } of step.objects) {
-      let match: SceneObject | undefined;
-      if (def.type === 'free-point') {
-        match = free((o) => o.def.type === 'free-point');
-        if (match?.def.type === 'free-point')
-          overrides.set(id, { type: 'free-point', pos: match.def.pos });
-      } else if (def.type === 'on-curve') {
-        const curve = mapping.get(def.curve);
-        match = free((o) => o.def.type === 'on-curve' && o.def.curve === curve);
-        if (match?.def.type === 'on-curve') overrides.set(id, { ...def, t: match.def.t });
-      } else {
-        const v = ref.byId.get(id)?.value ?? null;
-        match = free((o) => sameValue(v, o.value, scene.tol));
-      }
-      if (!match) continue;
-      mapping.set(id, match.id);
-      used.add(match.id);
-      if (overrides.has(id)) ref = evaluate(specs, level.sceneDiameter, overrides);
+  /** Candidate player matches for a reference object, each with the def override it implies. */
+  const candidates = (spec: ObjSpec, st: MapState): { obj: SceneObject; def?: ObjDef }[] => {
+    const used = new Set(st.mapping.values());
+    const open = players.filter((o) => !used.has(o.id));
+    const { def } = spec;
+    if (def.type === 'free-point') {
+      return open.flatMap((o) =>
+        o.def.type === 'free-point'
+          ? [{ obj: o, def: { type: 'free-point', pos: o.def.pos } }]
+          : [],
+      );
     }
-  }
-  return { mapping, ref };
+    if (def.type === 'on-curve') {
+      const curve = st.mapping.get(def.curve);
+      return open.flatMap((o) =>
+        o.def.type === 'on-curve' && o.def.curve === curve
+          ? [{ obj: o, def: { ...def, t: o.def.t } }]
+          : [],
+      );
+    }
+    const v = st.ref.byId.get(spec.id)?.value ?? null;
+    const exact = open.find((o) => sameValue(v, o.value, scene.tol));
+    if (exact) return [{ obj: exact }];
+    if (def.type !== 'intersection') return [];
+    const a = st.ref.byId.get(def.a)?.value;
+    const b = st.ref.byId.get(def.b)?.value;
+    if (!isCurve(a) || !isCurve(b)) return [];
+    const other = intersect(a, b, scene.tol)[1 - def.index];
+    const obj = other && open.find((o) => sameValue(other, o.value, scene.tol));
+    return obj ? [{ obj, def: { ...def, index: def.index === 0 ? 1 : 0 } }] : [];
+  };
+
+  const start: MapState = {
+    mapping: new Map(givenSpecs.map((g) => [g.id, g.id])),
+    overrides: new Map(),
+    ref: evaluate(specs, level.sceneDiameter),
+  };
+  let best = start;
+  let leaves = 0;
+  const search = (i: number, st: MapState): void => {
+    if (leaves >= SEARCH_LIMIT) return;
+    const spec = refSpecs[i];
+    if (!spec) {
+      leaves++;
+      if (st.mapping.size > best.mapping.size) best = st;
+      return;
+    }
+    const options = candidates(spec, st);
+    if (options.length === 0) return search(i + 1, st);
+    for (const { obj, def } of options) {
+      const mapping = new Map(st.mapping).set(spec.id, obj.id);
+      if (!def) {
+        search(i + 1, { ...st, mapping });
+        continue;
+      }
+      const overrides = new Map(st.overrides).set(spec.id, def);
+      search(i + 1, { mapping, overrides, ref: evaluate(specs, level.sceneDiameter, overrides) });
+    }
+  };
+  search(0, start);
+  return best;
 }
 
 /** Next hint for the player's scene, or `null` when the goal is already met. */

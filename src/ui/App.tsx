@@ -13,6 +13,7 @@ export function App({ store }: { store: Store }) {
   if (screen === 'level') return <GameScreen store={store} />;
   const editor = activeEditor(store).value;
   // Keyed by draft, so opening another draft starts a fresh editor screen (and canvas fit).
+  // Without an open editor the `editor` screen falls through to the map, like `problems`.
   if (screen === 'editor' && editor) return <EditorScreen key={editor.localId} editor={editor} />;
   const progress = store.progress.value;
   return (

@@ -21,6 +21,12 @@ export function openEditor(game: Store, storage: Storage | null, draft: Draft): 
   const slot = activeEditor(game);
   slot.peek()?.exit();
   const editor = createEditor(game, storage, draft);
+  // Leaving the editor also clears the slot, so a closed editor is never shown again.
+  const exit = editor.exit;
+  editor.exit = (): void => {
+    exit();
+    if (slot.peek() === editor) slot.value = null;
+  };
   slot.value = editor;
   game.screen.value = 'editor';
   return editor;

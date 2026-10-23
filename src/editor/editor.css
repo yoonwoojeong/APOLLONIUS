@@ -648,7 +648,7 @@
 
 .step-hint-input {
   width: 100%;
-  min-height: 40px;
+  min-height: 44px;
   padding: 8px 64px 8px 10px;
   border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
   border-radius: 9px;
@@ -782,4 +782,85 @@
 /* Solve shows the title in the game bar below. */
 .editor[data-mode='solve'] .modebar-title {
   display: none;
+}
+
+/* Pick mode: lines and circles take keyboard focus at a marker shown only when focused. */
+.pick-key {
+  outline: none;
+}
+
+.pick-key-ring {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 2px;
+}
+
+.pick-key:focus-visible .pick-key-ring {
+  stroke: var(--snap);
+}
+
+.delete-breaks {
+  display: block;
+  margin-top: 2px;
+  font-size: 13.5px;
+  color: var(--invalid);
+}
+
+/* Content pinned to a canvas point (the label editor), placed up and right of the point. */
+.canvas-overlay {
+  position: absolute;
+  z-index: 2;
+  width: 0;
+  height: 0;
+}
+
+.label-edit {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  animation: tip-in var(--t-ui) var(--ease-out) both;
+}
+
+.label-edit-input {
+  width: 64px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--snap) 55%, transparent);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow:
+    0 6px 18px rgb(0 0 0 / 12%),
+    0 1px 2px rgb(0 0 0 / 6%);
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.label-edit-input:focus-visible {
+  outline: 2px solid var(--snap);
+  outline-offset: 0;
+}
+
+.label-edit-input[aria-invalid='true'] {
+  border-color: var(--invalid);
+  outline-color: var(--invalid);
+}
+
+.label-edit-error {
+  width: max-content;
+  max-width: 200px;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 10%);
+  color: var(--invalid);
+  font-size: 13px;
+  line-height: 1.35;
 }

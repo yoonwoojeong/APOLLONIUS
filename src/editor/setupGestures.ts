@@ -68,7 +68,8 @@ type Result = { state: SetupGestureState; edits: SetupEdit[]; preview: SetupPrev
 const IDLE: SetupGestureState = { mode: 'idle' };
 const done = (edits: SetupEdit[] = []): Result => ({ state: IDLE, edits, preview: null });
 
-const LABEL_RE = /^[A-Za-z0-9′']{1,3}$/;
+/** What a point label may be: 1–3 letters, digits or primes. */
+export const LABEL_RE = /^[A-Za-z0-9′']{1,3}$/;
 
 /** Where an end of a gesture sits: an existing point's id, or empty space. */
 type End = { id: ObjId } | { pos: Vec };

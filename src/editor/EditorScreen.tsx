@@ -5,7 +5,7 @@ import { FitIcon } from '../ui/icons';
 import type { Editor, EditorMode } from './editorStore';
 import { EDITOR_PANEL_ID, ModeBar, modeTabId } from './ModeBar';
 import { SetupCanvas } from './SetupCanvas';
-import { dependants, type SetupModel, type SetupTool } from './setupGestures';
+import { dependants, LABEL_RE, type SetupModel, type SetupTool } from './setupGestures';
 import { SETUP_TOOLS, SetupPalette } from './SetupPalette';
 import { StepsPanel } from './StepsPanel';
 import './editor.css';
@@ -36,6 +36,95 @@ const TOOL_CUES: Record<SetupTool, string> = {
   circle: 'Drag from the centre out to the radius.',
 };
 
+/** How many working solution steps use any of `gone` (directly or through an earlier step). */
+function stepsBreaking(editor: Editor, gone: ObjId[]): number {
+  const lost = new Set(gone);
+  const steps = editor.solution.peek();
+  const working = editor.broken.peek() ?? steps.length;
+  let n = 0;
+  for (const st of steps.slice(0, working)) {
+    const uses = st.objects.some((o) => {
+      const d = o.def as Record<string, unknown>;
+      return ['a', 'b', 'center', 'through', 'curve'].some(
+        (k) => Object.hasOwn(d, k) && lost.has(d[k] as ObjId),
+      );
+    });
+    if (!uses) continue;
+    n++;
+    for (const o of st.objects) lost.add(o.id);
+  }
+  return n;
+}
+
+/** The inline label editor pinned to a point: Enter commits, Esc cancels. */
+function LabelEditor(p: {
+  initial: string;
+  /** Applies the label; returns an error message instead when it is not allowed. */
+  onCommit: (label: string) => string | null;
+  onClose: () => void;
+}) {
+  const [value, setValue] = useState(p.initial);
+  const [error, setError] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  /** Closed by Enter or Esc: a blur on the way out must not commit again. */
+  const closed = useRef(false);
+  const close = (): void => {
+    closed.current = true;
+    p.onClose();
+  };
+  useEffect(() => {
+    input.current?.focus({ preventScroll: true });
+    input.current?.select();
+  }, []);
+  const commit = (): void => {
+    const err = p.onCommit(value.trim());
+    setError(err);
+    if (!err) close();
+  };
+  return (
+    <div class="label-edit">
+      <input
+        ref={input}
+        type="text"
+        class="label-edit-input"
+        value={value}
+        maxLength={3}
+        autocomplete="off"
+        autocapitalize="characters"
+        spellcheck={false}
+        aria-label="Point label"
+        aria-invalid={!!error}
+        aria-describedby={error ? 'label-edit-error' : undefined}
+        onInput={(e) => {
+          setValue(e.currentTarget.value);
+          setError(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commit();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            close();
+          }
+        }}
+        // Leaving the field keeps a valid label and drops anything else.
+        onBlur={() => {
+          if (closed.current) return;
+          p.onCommit(value.trim());
+          close();
+        }}
+      />
+      {error && (
+        <p id="label-edit-error" class="label-edit-error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
 interface SetupState {
   tool: SetupTool;
   hideCentre: boolean;
@@ -54,16 +143,28 @@ function SetupMode({
   const { tool, hideCentre, deleting } = state;
   const model = editor.setup.value;
   const [picked, setPicked] = useState<ObjId | null>(null);
+  const [chosen, setChosen] = useState<ObjId | null>(null);
+  const [editing, setEditing] = useState(false);
   const [fitKey, setFitKey] = useState(0);
-  const pick = picked && model.givens.some((g) => g.id === picked) ? picked : null;
+  const exists = (id: ObjId | null): id is ObjId => !!id && model.givens.some((g) => g.id === id);
+  const pick = exists(picked) ? picked : null;
   const going = pick ? dependants(model, pick) : [];
+  // The selected point (Point tool): highlighted; tapping it again edits its label.
+  const sel = !deleting && tool === 'point' && exists(chosen) ? chosen : null;
+  const breaking = pick ? stepsBreaking(editor, [pick, ...going]) : 0;
 
+  const select = (id: ObjId | null, edit = false): void => {
+    setChosen(id);
+    setEditing(!!id && edit);
+  };
   const setTool = (t: SetupTool): void => {
     setPicked(null);
+    select(null);
     onState({ tool: t, deleting: false });
   };
   const setDeleting = (on: boolean): void => {
     setPicked(null);
+    select(null);
     onState({ deleting: on });
   };
   const confirmDelete = (): void => {
@@ -71,9 +172,18 @@ function SetupMode({
     editor.applySetup({ type: 'delete', ids: [pick] });
     setPicked(null);
   };
+  const relabel = (id: ObjId, label: string): string | null => {
+    const labels = editor.setup.peek().labels;
+    if (label === labels[id]) return null;
+    if (!LABEL_RE.test(label)) return 'Use 1–3 letters or digits.';
+    if (Object.entries(labels).some(([k, l]) => k !== id && l === label))
+      return `${label} is already used.`;
+    editor.applySetup({ type: 'relabel', id, label });
+    return null;
+  };
 
-  const live = useRef({ pick, deleting, confirmDelete, setTool, setDeleting });
-  live.current = { pick, deleting, confirmDelete, setTool, setDeleting };
+  const live = useRef({ pick, sel, deleting, confirmDelete, setTool, setDeleting, select });
+  live.current = { pick, sel, deleting, confirmDelete, setTool, setDeleting, select };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -81,6 +191,10 @@ function SetupMode({
       const mod = e.ctrlKey || e.metaKey;
       const k = e.key.toLowerCase();
       const s = live.current;
+      // Delete and Backspace belong to the figure: only from the canvas (or nothing focused).
+      const onFigure =
+        e.target === document.body ||
+        (e.target instanceof Element && !!e.target.closest('[data-testid="setup-canvas"]'));
       if (mod && k === 'z') {
         e.preventDefault();
         if (e.shiftKey) editor.redoSetup();
@@ -91,28 +205,51 @@ function SetupMode({
       } else if (!mod && !e.shiftKey && /^[1-5]$/.test(e.key)) {
         e.preventDefault();
         s.setTool(SETUP_TOOLS[Number(e.key) - 1]!.id);
-      } else if (!mod && (e.key === 'Delete' || e.key === 'Backspace')) {
+      } else if (!mod && onFigure && (e.key === 'Delete' || e.key === 'Backspace')) {
         e.preventDefault();
         if (s.pick) s.confirmDelete();
         else s.setDeleting(true);
-      } else if (e.key === 'Escape' && s.deleting) {
-        if (s.pick) setPicked(null);
-        else s.setDeleting(false);
+      } else if (e.key === 'Escape') {
+        if (s.deleting) {
+          if (s.pick) setPicked(null);
+          else s.setDeleting(false);
+        } else if (s.sel) s.select(null);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [editor]);
 
+  // The delete card takes focus (its Delete button) when it appears.
+  const deleteBtn = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (pick) deleteBtn.current?.focus({ preventScroll: true });
+  }, [pick]);
+
   const cue = deleting
     ? pick
       ? null
       : 'Tap a point, line or circle to delete it.'
-    : model.givens.length < 2
-      ? TOOL_CUES[tool]
-      : null;
+    : sel && !editing
+      ? `Tap ${model.labels[sel] ?? 'the point'} again to rename it.`
+      : model.givens.length < 2
+        ? TOOL_CUES[tool]
+        : null;
 
   const target = pick ? model.givens.find((g) => g.id === pick)! : null;
+  const prompt = target
+    ? {
+        name: nameOf(target.def, target.id, model.labels),
+        rest:
+          going.length > 0
+            ? ` and ${going.length} ${going.length === 1 ? 'object that depends' : 'objects that depend'} on it`
+            : '',
+        breaks:
+          breaking > 0
+            ? `${breaking} solution ${breaking === 1 ? 'step' : 'steps'} will break.`
+            : '',
+      }
+    : null;
 
   return (
     <div class="setup-screen">
@@ -134,12 +271,33 @@ function SetupMode({
           tool={tool}
           hideCentre={hideCentre}
           onPick={deleting ? setPicked : null}
-          selected={pick ? [pick, ...going] : []}
+          selected={pick ? [pick, ...going] : sel ? [sel] : []}
           fitKey={fitKey}
+          onTap={(id) => select(id, !!id && id === sel)}
+          onPointKey={(id, key) => select(id, key === 'F2' || id === sel)}
+          overlay={
+            sel && editing
+              ? {
+                  id: sel,
+                  content: (
+                    <LabelEditor
+                      key={sel}
+                      initial={model.labels[sel] ?? ''}
+                      onCommit={(label) => relabel(sel, label)}
+                      onClose={() => setEditing(false)}
+                    />
+                  ),
+                }
+              : null
+          }
         />
         {/* Announced politely; shown as a quiet caption over the canvas. */}
         <p class={cue ? 'stage-cue' : 'stage-cue is-empty'} role="status">
           {cue ?? ''}
+        </p>
+        {/* The delete prompt, announced when it appears. */}
+        <p class="sr-only" role="status">
+          {prompt ? `Delete ${prompt.name}${prompt.rest}? ${prompt.breaks}` : ''}
         </p>
         {model.givens.length > 0 && (
           <button
@@ -152,19 +310,17 @@ function SetupMode({
             <FitIcon />
           </button>
         )}
-        {target && (
-          <div class="delete-confirm" role="group" aria-label="Delete">
+        {prompt && (
+          <div class="delete-confirm" role="group" aria-label="Confirm delete">
             <p class="delete-text">
-              Delete <strong>{nameOf(target.def, target.id, model.labels)}</strong>
-              {going.length > 0 &&
-                ` and ${going.length} ${going.length === 1 ? 'object that depends' : 'objects that depend'} on it`}
-              ?
+              Delete <strong>{prompt.name}</strong>
+              {prompt.rest}?{prompt.breaks && <span class="delete-breaks"> {prompt.breaks}</span>}
             </p>
             <div class="delete-actions">
               <button type="button" class="text-btn" onClick={() => setPicked(null)}>
                 Cancel
               </button>
-              <button type="button" class="danger-btn" onClick={confirmDelete}>
+              <button ref={deleteBtn} type="button" class="danger-btn" onClick={confirmDelete}>
                 Delete
               </button>
             </div>

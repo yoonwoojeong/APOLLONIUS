@@ -129,7 +129,7 @@ export function StepsPanel({ editor }: { editor: Editor }) {
                                 type="button"
                                 class="star-btn"
                                 aria-pressed={on}
-                                aria-label={`Target: ${text}`}
+                                aria-label={`Step ${i + 1} target: ${text}`}
                                 title={on ? 'Target (tap to unmark)' : 'Mark as target'}
                                 onClick={() => editor.toggleTarget(o.id)}
                               >

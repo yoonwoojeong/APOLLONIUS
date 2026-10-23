@@ -1,4 +1,7 @@
+import type { ComponentChildren } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { isPointValue } from '../canvas/candidates';
+import { describe } from '../construction/describe';
 import { evaluate } from '../construction/evaluate';
 import type { ObjId, ObjSpec, Scene } from '../construction/types';
 import { dist, sub, type Vec } from '../geometry/vec';
@@ -53,6 +56,20 @@ function setupScene(
   return { scene, bounds: ok ? f.view : FALLBACK_BOUNDS };
 }
 
+/** Where a given line or circle takes keyboard focus: a line's midpoint, a circle's centre. */
+function curveAnchor(o: Scene['objects'][number], scene: Scene): Vec | null {
+  if (!o.value) return null;
+  if (o.def.type === 'given-line') {
+    const a = scene.byId.get(o.def.a)?.value ?? null;
+    const b = scene.byId.get(o.def.b)?.value ?? null;
+    return isPointValue(a) && isPointValue(b) ? { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } : null;
+  }
+  if (o.def.type === 'circle' || o.def.type === 'given-circle') {
+    return 'c' in o.value ? o.value.c : null;
+  }
+  return null;
+}
+
 interface Props {
   editor: Editor;
   tool: SetupTool;
@@ -67,10 +84,20 @@ interface Props {
   selected?: ObjId[];
   /** Each change refits the view to the givens (a Fit control). */
   fitKey?: number;
+  /**
+   * Point tool: a tap (no drag) reports the point it started on, or null for empty space
+   * (which still places a point as usual).
+   */
+  onTap?: (id: ObjId | null) => void;
+  /** Point tool: Enter or F2 on a focused point. */
+  onPointKey?: (id: ObjId, key: 'Enter' | 'F2') => void;
+  /** Content pinned to a point on screen (the label editor); follows pans and zooms. */
+  overlay?: { id: ObjId; content: ComponentChildren } | null;
 }
 
 /** The Setup canvas: place and drag givens with the game's pointer flow, through the editor. */
-export function SetupCanvas({ editor, tool, hideCentre, onPick, selected, fitKey }: Props) {
+export function SetupCanvas(props: Props) {
+  const { editor, tool, hideCentre, onPick, selected, fitKey, overlay } = props;
   const model = editor.setup.value;
   const { scene, bounds } = useMemo(
     () => setupScene(model.givens, model.labels),
@@ -103,12 +130,17 @@ export function SetupCanvas({ editor, tool, hideCentre, onPick, selected, fitKey
   const gesture = useRef<SetupGestureState>(IDLE);
   const mode = useRef<Mode>('none');
   const pointers = useRef(new Map<number, Vec>());
-  const primary = useRef<{ id: number; kind: InputKind; start: Vec; dragged: boolean } | null>(
-    null,
-  );
+  const primary = useRef<{
+    id: number;
+    kind: InputKind;
+    start: Vec;
+    dragged: boolean;
+    /** The point the press started on, if any. */
+    from: ObjId | null;
+  } | null>(null);
   const pinch = useRef<{ mid: Vec; d: number } | null>(null);
-  const live = useRef({ scene, tool, hideCentre, editor, dispatch, onPick });
-  live.current = { scene, tool, hideCentre, editor, dispatch, onPick };
+  const live = useRef({ scene, tool, hideCentre, editor, dispatch, onPick, props });
+  live.current = { scene, tool, hideCentre, editor, dispatch, onPick, props };
   const picking = !!onPick;
 
   const local = (e: { clientX: number; clientY: number }): Vec => {
@@ -250,7 +282,14 @@ export function SetupCanvas({ editor, tool, hideCentre, onPick, selected, fitKey
       /* the pointer is already gone */
     }
     if (pointers.current.size === 1) {
-      primary.current = { id: e.pointerId, kind, start: pt, dragged: false };
+      const at = targetAt(pt, kind);
+      primary.current = {
+        id: e.pointerId,
+        kind,
+        start: pt,
+        dragged: false,
+        from: at?.kind === 'point' ? at.id : null,
+      };
       mode.current = 'gesture';
       setSnap(null);
       if (!live.current.onPick) dispatch(event('down', pt, kind));
@@ -296,8 +335,12 @@ export function SetupCanvas({ editor, tool, hideCentre, onPick, selected, fitKey
     const p = primary.current;
     if (mode.current === 'gesture' && e.pointerId === p?.id) {
       const pick = live.current.onPick;
-      if (!pick) dispatch(event('up', pt, inputKind(e)));
-      else if (!p.dragged) pick(pickAt(pt, inputKind(e)));
+      if (pick) {
+        if (!p.dragged) pick(pickAt(pt, inputKind(e)));
+      } else {
+        dispatch(event('up', pt, inputKind(e)));
+        if (!p.dragged && live.current.tool === 'point') live.current.props.onTap?.(p.from);
+      }
     }
     release();
   };
@@ -325,15 +368,20 @@ export function SetupCanvas({ editor, tool, hideCentre, onPick, selected, fitKey
         aria-label="Setup canvas"
         tabindex={-1}
         onKeyDown={(e) => {
-          // Pick mode: Enter or Space on a focused point picks it.
-          const pick = live.current.onPick;
-          if (!pick || (e.key !== 'Enter' && e.key !== ' ')) return;
-          const id = (e.target as Element)
-            .closest?.('[data-kind="point"]')
-            ?.getAttribute('data-id');
-          if (!id) return;
-          e.preventDefault();
-          pick(id);
+          const el = (e.target as Element).closest?.('[data-kind="point"], [data-pick-id]');
+          const id = el?.getAttribute('data-pick-id') ?? el?.getAttribute('data-id');
+          if (!el || !id) return;
+          const { onPick: pick, props: p, tool: t } = live.current;
+          if (pick) {
+            // Pick mode: Enter or Space on a focused point, line or circle picks it.
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            pick(id);
+          } else if (t === 'point' && (e.key === 'Enter' || e.key === 'F2')) {
+            if (el.getAttribute('data-kind') !== 'point') return;
+            e.preventDefault();
+            p.onPointKey?.(id, e.key);
+          }
         }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -408,10 +456,46 @@ export function SetupCanvas({ editor, tool, hideCentre, onPick, selected, fitKey
                   );
                 })}
               </g>
+              {picking && (
+                // Keyboard access to lines and circles in pick mode: a focus stop at each.
+                <g class="pick-keys">
+                  {scene.objects.map((o) => {
+                    const at = curveAnchor(o, scene);
+                    if (!at) return null;
+                    const p = toScreen(vp, at);
+                    const name = describe(o, scene);
+                    return (
+                      <g
+                        key={o.id}
+                        class="pick-key"
+                        data-pick-id={o.id}
+                        role="button"
+                        tabindex={0}
+                        aria-label={`Select ${name.charAt(0).toLowerCase()}${name.slice(1)}`}
+                        transform={`translate(${p.x} ${p.y})`}
+                      >
+                        <circle class="pick-key-ring" r={12} />
+                      </g>
+                    );
+                  })}
+                </g>
+              )}
             </>
           )}
         </g>
       </svg>
+      {vp &&
+        overlay &&
+        (() => {
+          const v = scene.byId.get(overlay.id)?.value;
+          if (!v || !isPointValue(v)) return null;
+          const p = toScreen(vp, v);
+          return (
+            <div class="canvas-overlay" style={{ left: `${p.x}px`, top: `${p.y}px` }}>
+              {overlay.content}
+            </div>
+          );
+        })()}
       {size && <Magnifier point={loupe} size={size} sceneId={ids.root} />}
     </div>
   );

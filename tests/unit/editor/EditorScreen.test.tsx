@@ -74,6 +74,38 @@ function addPoints(ed: Editor, pts: [number, number][]): string[] {
   });
 }
 
+/** Screen position of a point on the setup canvas (from its transform). */
+function posOf(host: HTMLElement, id: string): [number, number] {
+  const el = host.querySelector(`[data-kind="point"][data-id="${id}"]`)!;
+  const m = /translate\(([-\d.]+)[ ,]+([-\d.]+)\)/.exec(el.getAttribute('transform') ?? '')!;
+  return [Number(m[1]), Number(m[2])];
+}
+
+/** A mouse tap (or drag to `to`) on the setup canvas. */
+function tapAt(host: HTMLElement, [x, y]: [number, number], to?: [number, number]) {
+  const svg = host.querySelector('[data-testid="setup-canvas"]')!;
+  const pointer = (type: string, px: number, py: number) => {
+    const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: px, clientY: py });
+    Object.assign(e, { pointerId: 1, pointerType: 'mouse' });
+    svg.dispatchEvent(e);
+  };
+  act(() => {
+    pointer('pointerdown', x, y);
+    if (to) pointer('pointermove', to[0], to[1]);
+    pointer('pointerup', ...(to ?? [x, y]));
+  });
+}
+
+const typeInto = (input: HTMLInputElement, value: string) =>
+  act(() => {
+    input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+const keyOn = (el: Element, k: string) =>
+  act(() => {
+    el.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+  });
+
 function add(game: Store, defs: ObjSpec['def'][]): string[] {
   const objects = defs.map((def) => ({ id: game.construction().allocId(), def }));
   act(() => {
@@ -191,7 +223,7 @@ describe('EditorScreen', () => {
       pointer('pointerup');
     });
     const confirm = host.querySelector('.delete-confirm')!;
-    expect(confirm.textContent).toContain('A');
+    expect(confirm.textContent).toContain('point A');
     expect(confirm.textContent).toContain('1 object that depends on it');
     click([...confirm.querySelectorAll('button')].find((x) => x.textContent === 'Delete')!);
     expect(editor.setup.value.givens.map((g) => g.id)).toEqual([b]);
@@ -294,5 +326,196 @@ describe('EditorScreen', () => {
     const after = host.querySelector('[data-testid="setup-canvas"]');
     expect(after).not.toBeNull();
     expect(after).not.toBe(before);
+  });
+
+  it('exiting clears the active editor', () => {
+    const { game, host } = setup();
+    click(btn(host, 'Back to My problems'));
+    expect(activeEditor(game).value).toBeNull();
+    expect(host.querySelector('[role="tablist"]')).toBeNull();
+  });
+
+  it('in Solve, the mode bar keeps the theme toggle while the game bar has no Hint or theme', () => {
+    const { host } = setup();
+    click(tab(host, 'Solve'));
+    expect(host.querySelector('.modebar .theme-toggle')).not.toBeNull();
+    expect(host.querySelector('.topbar .theme-toggle')).toBeNull();
+    expect(btn(host, 'Hint')).toBeNull();
+  });
+
+  it('digits typed in a hint input stay text and do not switch tools', () => {
+    const { game, editor, host } = setup();
+    const [a, b] = addPoints(editor, [
+      [-1, 0],
+      [1, 0],
+    ]) as [string, string];
+    click(tab(host, 'Solve'));
+    add(game, [{ type: 'circle', center: a, through: b }]);
+    const tool = game.tool.value;
+    const input = host.querySelector<HTMLInputElement>('.step-row input')!;
+    const e = new KeyboardEvent('keydown', { key: '1', bubbles: true, cancelable: true });
+    act(() => {
+      input.dispatchEvent(e);
+    });
+    expect(e.defaultPrevented).toBe(false);
+    expect(game.tool.value).toBe(tool);
+  });
+
+  it('names the step on each ☆', () => {
+    const { game, editor, host } = setup();
+    const [a, b] = addPoints(editor, [
+      [-1, 0],
+      [1, 0],
+    ]) as [string, string];
+    click(tab(host, 'Solve'));
+    add(game, [{ type: 'circle', center: a, through: b }]);
+    expect(btn(host, 'Step 1 target: Circle centered at A through B')).not.toBeNull();
+  });
+
+  describe('Setup selection and labels', () => {
+    it('a tap selects a point; tapping it again edits its label (one undo step)', () => {
+      const { editor, host } = setup();
+      const [a] = addPoints(editor, [
+        [-1, 0],
+        [1, 0],
+      ]) as [string, string];
+      tapAt(host, posOf(host, a));
+      expect(editor.setup.value.givens).toHaveLength(2); // no point added
+      expect(host.querySelector(`[data-kind="point"][data-id="${a}"]`)!.classList).toContain(
+        'is-hint',
+      );
+      expect(host.querySelector('.label-edit input')).toBeNull();
+      tapAt(host, posOf(host, a));
+      const input = host.querySelector<HTMLInputElement>('.label-edit input')!;
+      expect(input.value).toBe('A');
+      expect(input.maxLength).toBe(3);
+      typeInto(input, 'P');
+      keyOn(input, 'Enter');
+      expect(editor.setup.value.labels[a]).toBe('P');
+      expect(host.querySelector('.label-edit')).toBeNull();
+      click(btn(host, 'Undo'));
+      expect(editor.setup.value.labels[a]).toBe('A');
+    });
+
+    it('rejects invalid and duplicate labels with an inline error; Esc cancels', () => {
+      const { editor, host } = setup();
+      const [a] = addPoints(editor, [
+        [-1, 0],
+        [1, 0],
+      ]) as [string, string];
+      tapAt(host, posOf(host, a));
+      tapAt(host, posOf(host, a));
+      const input = host.querySelector<HTMLInputElement>('.label-edit input')!;
+      typeInto(input, '!');
+      keyOn(input, 'Enter');
+      expect(host.querySelector('.label-edit-error')!.textContent).toMatch(/letters/);
+      expect(input.getAttribute('aria-invalid')).toBe('true');
+      typeInto(input, 'B');
+      keyOn(input, 'Enter');
+      expect(host.querySelector('.label-edit-error')!.textContent).toContain('already');
+      expect(editor.setup.value.labels[a]).toBe('A');
+      keyOn(input, 'Escape');
+      expect(host.querySelector('.label-edit')).toBeNull();
+      expect(editor.setup.value.labels[a]).toBe('A');
+      expect(editor.canUndoSetup.value).toBe(true); // only the two adds
+    });
+
+    it('F2 on a focused point edits its label', () => {
+      const { editor, host } = setup();
+      const [a] = addPoints(editor, [[0, 0]]) as [string];
+      keyOn(host.querySelector(`[data-kind="point"][data-id="${a}"]`)!, 'F2');
+      expect(host.querySelector<HTMLInputElement>('.label-edit input')!.value).toBe('A');
+    });
+
+    it('a drag still moves a point, and a tap on empty space deselects (and places a point)', () => {
+      const { editor, host } = setup();
+      const [a] = addPoints(editor, [
+        [-1, 0],
+        [1, 0],
+      ]) as [string, string];
+      tapAt(host, posOf(host, a));
+      const [x, y] = posOf(host, a);
+      tapAt(host, [x, y], [x + 40, y + 40]);
+      const def = editor.setup.value.givens[0]!.def as { pos: { x: number } };
+      expect(def.pos.x).not.toBe(-1);
+      tapAt(host, [20, 20]);
+      expect(editor.setup.value.givens).toHaveLength(3);
+      expect(host.querySelectorAll('.points .is-hint')).toHaveLength(0);
+    });
+  });
+
+  describe('Delete', () => {
+    function withSegment() {
+      const env = setup();
+      const [a, b] = addPoints(env.editor, [
+        [-1, 0],
+        [1, 0],
+      ]) as [string, string];
+      act(() =>
+        env.editor.applySetup({
+          type: 'add',
+          specs: [
+            { id: env.editor.allocId(), def: { type: 'given-line', a, b, extent: 'segment' } },
+          ],
+          labels: {},
+        }),
+      );
+      return { ...env, a, b };
+    }
+
+    it('focuses the card’s Delete button and announces the prompt', () => {
+      const { host, a } = withSegment();
+      click(btn(host, 'Delete'));
+      tapAt(host, posOf(host, a));
+      const confirm = host.querySelector('.delete-confirm')!;
+      expect(document.activeElement?.textContent).toBe('Delete');
+      expect(confirm.contains(document.activeElement)).toBe(true);
+      const status = [...host.querySelectorAll('[role="status"]')].map((s) => s.textContent);
+      expect(status.some((t) => t?.includes('point A'))).toBe(true);
+    });
+
+    it('undo after a confirmed delete restores the objects', () => {
+      const { editor, host, a } = withSegment();
+      click(btn(host, 'Delete'));
+      tapAt(host, posOf(host, a));
+      click(
+        [...host.querySelectorAll('.delete-confirm button')].find(
+          (x) => x.textContent === 'Delete',
+        )!,
+      );
+      expect(editor.setup.value.givens).toHaveLength(1);
+      click(btn(host, 'Undo'));
+      expect(editor.setup.value.givens).toHaveLength(3);
+    });
+
+    it('a lone segment can be picked from the keyboard', () => {
+      const { host } = withSegment();
+      click(btn(host, 'Delete'));
+      const key = host.querySelector('[data-pick-id]')!;
+      expect(key.getAttribute('tabindex')).toBe('0');
+      keyOn(key, 'Enter');
+      expect(host.querySelector('.delete-confirm')!.textContent).toContain('segment AB');
+    });
+
+    it('says how many solution steps will break', () => {
+      const { game, editor, host, a, b } = withSegment();
+      click(tab(host, 'Solve'));
+      add(game, [{ type: 'circle', center: a, through: b }]);
+      click(tab(host, 'Setup'));
+      void editor;
+      click(btn(host, 'Delete'));
+      tapAt(host, posOf(host, a));
+      expect(host.querySelector('.delete-confirm')!.textContent).toContain(
+        '1 solution step will break',
+      );
+    });
+
+    it('Delete and Backspace do nothing while a button has focus', () => {
+      const { host } = withSegment();
+      const t = tab(host, 'Setup');
+      t.focus();
+      keyOn(t, 'Delete');
+      expect(btn(host, 'Delete')!.getAttribute('aria-pressed')).toBe('false');
+    });
   });
 });

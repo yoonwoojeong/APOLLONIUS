@@ -44,6 +44,8 @@ const FREE_TURN = 0.05;
 const ID_RE = /^[A-Za-z0-9_-]+$/;
 // eslint-disable-next-line no-control-regex
 const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f]/;
+/** Invisible or direction-changing characters: bidi overrides/isolates, line/paragraph separators, zero-width. */
+const INVISIBLE_RE = /[\u200b-\u200d\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]/;
 const TOOLS: readonly ToolId[] = ['point', 'line', 'circle', 'perp-bisector'];
 const REQUIRED_TOOLS: readonly ToolId[] = ['point', 'line', 'circle'];
 
@@ -85,7 +87,20 @@ const TOP_OPTIONAL = ['explain', 'author'];
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 const isFiniteNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
-const len = (s: string): number => [...s].length;
+const own = (o: object, k: PropertyKey): boolean => Object.hasOwn(o, k);
+/** True if every index of the array is present (no holes). */
+const dense = (a: unknown[]): boolean => {
+  for (let i = 0; i < a.length; i++) if (!own(a, i)) return false;
+  return true;
+};
+/**
+ * Length in characters (code points). Strings far over `max` are not spread: anything longer
+ * than `2 * max` UTF-16 units is over the limit anyway, so its unit count is returned instead.
+ */
+const len = (s: string, max: number): number => (s.length > max * 2 ? s.length : [...s].length);
+/** The label the author gave `id`, if any (own properties only, never Object.prototype). */
+const labelOf = (p: Problem, id: ObjId): string | undefined =>
+  own(p.labels, id) ? p.labels[id] : undefined;
 
 /** A specs entry with where it sits: `step` is the 0-based solution step, or null for givens. */
 interface Located {
@@ -107,7 +122,7 @@ const allSpecs = (p: Problem): ObjSpec[] => [...p.givens, ...p.solution.flatMap(
 
 /** "Step 3" for solution objects, "Given A" for givens. */
 function where(p: Problem, l: Located): string {
-  return l.step === null ? `Given ${p.labels[l.spec.id] ?? l.spec.id}` : `Step ${l.step + 1}`;
+  return l.step === null ? `Given ${labelOf(p, l.spec.id) ?? l.spec.id}` : `Step ${l.step + 1}`;
 }
 
 // ---------------------------------------------------------------- 1. shape
@@ -127,54 +142,68 @@ function checkShape(input: unknown): ValidationError[] {
     }
   }
   for (const k of TOP_REQUIRED) {
-    if (!(k in input)) err(k, `The field "${k}" is missing.`);
+    if (!own(input, k)) err(k, `The field "${k}" is missing.`);
   }
-  if ('format' in input && input.format !== 'apollonius-problem') {
+  if (own(input, 'format') && input.format !== 'apollonius-problem') {
     err('format', 'This is not an Apollonius problem file (format must be "apollonius-problem").');
   }
-  if ('version' in input && input.version !== 1) {
+  if (own(input, 'version') && input.version !== 1) {
     err(
       'version',
       'This problem was made by a newer version of Apollonius (only version 1 is supported).',
     );
   }
   for (const k of ['title', 'goalText', 'explain', 'author']) {
-    if (k in input && typeof input[k] !== 'string') err(k, `The ${k} must be text.`);
+    if (own(input, k) && typeof input[k] !== 'string') err(k, `The ${k} must be text.`);
   }
-  if ('tools' in input) {
+  if (own(input, 'tools')) {
     const t = input.tools;
-    if (!Array.isArray(t) || !t.every((x) => typeof x === 'string')) {
+    if (!Array.isArray(t) || !dense(t) || !t.every((x) => typeof x === 'string')) {
       err('tools', 'The tools must be a list of tool names.');
     }
   }
-  if ('labels' in input) {
+  if (own(input, 'labels')) {
     const l = input.labels;
     if (!isObj(l) || !Object.values(l).every((x) => typeof x === 'string')) {
       err('labels', 'The labels must map object ids to text.');
     }
   }
-  if ('targets' in input) {
+  if (own(input, 'targets')) {
     const t = input.targets;
-    if (!Array.isArray(t) || !t.every((x) => typeof x === 'string')) {
+    if (!Array.isArray(t) || !dense(t) || !t.every((x) => typeof x === 'string')) {
       err('targets', 'The targets must be a list of object ids.');
     }
   }
-  if ('par' in input) {
+  if (own(input, 'par')) {
     const par = input.par;
     const count = (v: unknown): boolean => Number.isInteger(v) && (v as number) >= 0;
-    if (!isObj(par) || Object.keys(par).length !== 2 || !count(par.L) || !count(par.E)) {
+    if (
+      !isObj(par) ||
+      Object.keys(par).length !== 2 ||
+      !own(par, 'L') ||
+      !own(par, 'E') ||
+      !count(par.L) ||
+      !count(par.E)
+    ) {
       err('par', 'Par must be { "L": n, "E": n } with whole numbers of moves.');
     }
   }
 
   const spec = (v: unknown, path: string, name: string): void => {
-    if (!isObj(v) || Object.keys(v).length !== 2 || typeof v.id !== 'string' || !isObj(v.def)) {
+    if (
+      !isObj(v) ||
+      Object.keys(v).length !== 2 ||
+      !own(v, 'id') ||
+      !own(v, 'def') ||
+      typeof v.id !== 'string' ||
+      !isObj(v.def)
+    ) {
       err(path, `${name}: each object needs exactly an "id" and a "def".`);
       return;
     }
     const def = v.def;
     const fields =
-      typeof def.type === 'string' && Object.hasOwn(DEF_FIELDS, def.type)
+      own(def, 'type') && typeof def.type === 'string' && own(DEF_FIELDS, def.type)
         ? DEF_FIELDS[def.type as ObjDef['type']]
         : undefined;
     if (!fields) {
@@ -182,13 +211,14 @@ function checkShape(input: unknown): ValidationError[] {
       return;
     }
     for (const k of Object.keys(def)) {
-      if (k !== 'type' && !(k in fields)) err(`${path}.def.${k}`, `${name}: unknown field "${k}".`);
+      if (k !== 'type' && !own(fields, k))
+        err(`${path}.def.${k}`, `${name}: unknown field "${k}".`);
     }
     for (const [k, kind] of Object.entries(fields)) {
-      const fv = def[k];
+      const fv = own(def, k) ? def[k] : undefined;
       const fp = `${path}.def.${k}`;
       if (kind === 'vec') {
-        if (!isObj(fv) || Object.keys(fv).length !== 2 || !('x' in fv) || !('y' in fv)) {
+        if (!isObj(fv) || Object.keys(fv).length !== 2 || !own(fv, 'x') || !own(fv, 'y')) {
           err(fp, `${name}: "${k}" must be a position { "x", "y" }.`);
         } else {
           for (const c of ['x', 'y']) {
@@ -207,14 +237,14 @@ function checkShape(input: unknown): ValidationError[] {
     }
   };
 
-  if ('givens' in input) {
+  if (own(input, 'givens')) {
     const g = input.givens;
-    if (!Array.isArray(g)) err('givens', 'The givens must be a list of objects.');
+    if (!Array.isArray(g) || !dense(g)) err('givens', 'The givens must be a list of objects.');
     else g.forEach((v, i) => spec(v, `givens[${i}]`, `Given ${i + 1}`));
   }
-  if ('solution' in input) {
+  if (own(input, 'solution')) {
     const s = input.solution;
-    if (!Array.isArray(s)) {
+    if (!Array.isArray(s) || !dense(s)) {
       err('solution', 'The solution must be a list of steps.');
     } else {
       s.forEach((step, si) => {
@@ -222,11 +252,13 @@ function checkShape(input: unknown): ValidationError[] {
         const name = `Step ${si + 1}`;
         if (
           !isObj(step) ||
-          Object.keys(step).length !== 2 ||
+          !Object.keys(step).every((k) => k === 'objects' || k === 'nudge') ||
+          !own(step, 'objects') ||
           !Array.isArray(step.objects) ||
-          typeof step.nudge !== 'string'
+          !dense(step.objects) ||
+          (own(step, 'nudge') && typeof step.nudge !== 'string')
         ) {
-          err(path, `${name}: each step needs exactly "objects" (a list) and "nudge" (text).`);
+          err(path, `${name}: each step needs "objects" (a list) and optionally "nudge" (text).`);
           return;
         }
         step.objects.forEach((v, oi) => spec(v, `${path}.objects[${oi}]`, name));
@@ -251,7 +283,7 @@ function checkLimits(p: Problem): ValidationError[] {
     max: number,
     unit = 'characters',
   ): void => {
-    const n = len(s);
+    const n = len(s, max);
     if (n < min || n > max) {
       limit(
         path,
@@ -265,6 +297,13 @@ function checkLimits(p: Problem): ValidationError[] {
     }
     if (CONTROL_RE.test(s)) {
       errs.push({ code: 'text', path, message: `${name} can't contain line breaks or tabs.` });
+    }
+    if (INVISIBLE_RE.test(s)) {
+      errs.push({
+        code: 'text',
+        path,
+        message: `${name} can't contain invisible or direction-changing characters.`,
+      });
     }
     if (s !== s.trim()) {
       errs.push({ code: 'text', path, message: `${name} can't start or end with spaces.` });
@@ -343,12 +382,14 @@ function checkReferences(p: Problem): ValidationError[] {
   for (const l of located(p)) {
     const { id, def } = l.spec;
     const name = where(p, l);
-    if (len(id) > LIMITS.idMax || !ID_RE.test(id)) {
+    if (len(id, LIMITS.idMax) > LIMITS.idMax || !ID_RE.test(id)) {
       err(
         'id',
         `${l.path}.id`,
         `${name}: the id "${id}" must be 1–${LIMITS.idMax} letters, digits, "_" or "-".`,
       );
+    } else if (id in Object.prototype) {
+      err('id', `${l.path}.id`, `${name}: "${id}" is a reserved word — pick another id.`);
     } else if (defined.has(id)) {
       err('id', `${l.path}.id`, `${name}: the id "${id}" is used twice.`);
     }
@@ -374,7 +415,7 @@ function checkReferences(p: Problem): ValidationError[] {
         continue;
       }
       const isPt = POINT_TYPES.includes(target.spec.def.type);
-      const refName = p.labels[ref] ?? ref;
+      const refName = labelOf(p, ref) ?? ref;
       if (l.step === null) {
         if (target.spec.def.type !== 'given-point') {
           err('type', fp, `${name}: it must be built from given points, but ${refName} isn't one.`);
@@ -398,7 +439,7 @@ function checkReferences(p: Problem): ValidationError[] {
       err(
         'target-given',
         path,
-        `Target ${p.labels[id] ?? id} is a given — the player would have nothing to construct.`,
+        `Target ${labelOf(p, id) ?? id} is a given — the player would have nothing to construct.`,
       );
     }
     seen.add(id);
@@ -524,7 +565,7 @@ function checkGeometry(p: Problem): ValidationError[] {
   }
   const specs = allSpecs(p);
   const scene = evaluate(specs, D);
-  for (const o of scene.objects) o.label = p.labels[o.id];
+  for (const o of scene.objects) o.label = labelOf(p, o.id);
   const locs = located(p);
   scene.objects.forEach((o, i) => {
     if (o.value !== null) return;
@@ -559,7 +600,7 @@ function checkGeometry(p: Problem): ValidationError[] {
   }
 
   const solution = p.solution.flatMap((s) => s.objects);
-  const name = (id: ObjId): string => r.c.scene().byId.get(id)?.label ?? p.labels[id] ?? id;
+  const name = (id: ObjId): string => r.c.scene().byId.get(id)?.label ?? labelOf(p, id) ?? id;
   p.targets.forEach((id, i) => {
     const v = scene.byId.get(id)?.value ?? null;
     const g = p.givens.find((gv) => sameValue(v, scene.byId.get(gv.id)?.value ?? null, scene.tol));
@@ -652,7 +693,7 @@ function checkTappability(p: Problem): ValidationError[] {
   );
   return issues.map((issue) => {
     const near = labelled.byId.get(issue.nearId);
-    const nearName = near?.label ?? p.labels[issue.nearId] ?? issue.nearId;
+    const nearName = near?.label ?? labelOf(p, issue.nearId) ?? issue.nearId;
     const movable = near?.def.type === 'given-point' || near?.def.type === 'free-point';
     return {
       code: 'untappable' as const,
@@ -671,20 +712,32 @@ function checkTappability(p: Problem): ValidationError[] {
  * errors stop the later phases, so geometry rules only ever see well-formed, finite input.
  */
 export function validate(input: unknown): ValidationResult {
-  const shape = checkShape(input);
-  if (shape.length) return { ok: false, errors: shape };
-  const p = input as Problem;
-  const phases = [
-    checkLimits,
-    checkReferences,
-    checkTools,
-    checkGeometry,
-    checkPar,
-    checkTappability,
-  ];
-  for (const phase of phases) {
-    const errors = phase(p);
-    if (errors.length) return { ok: false, errors };
+  try {
+    const shape = checkShape(input);
+    if (shape.length) return { ok: false, errors: shape };
+    const raw = input as Problem;
+    // A step's nudge may be left out of a file; it means "no hint".
+    const p: Problem = {
+      ...raw,
+      solution: raw.solution.map((s) => ({ objects: s.objects, nudge: s.nudge ?? '' })),
+    };
+    const phases = [
+      checkLimits,
+      checkReferences,
+      checkTools,
+      checkGeometry,
+      checkPar,
+      checkTappability,
+    ];
+    for (const phase of phases) {
+      const errors = phase(p);
+      if (errors.length) return { ok: false, errors };
+    }
+    return { ok: true, problem: p };
+  } catch {
+    return {
+      ok: false,
+      errors: [{ code: 'shape', path: '', message: "This file isn't a valid problem." }],
+    };
   }
-  return { ok: true, problem: p };
 }

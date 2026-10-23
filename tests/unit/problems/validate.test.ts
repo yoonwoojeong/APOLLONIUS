@@ -423,3 +423,99 @@ describe('solutionMoves', () => {
     expect(solutionMoves(p)).toEqual({ L: 1, E: 3 });
   });
 });
+
+describe('validate: fix round 1', () => {
+  test.each([
+    ['solution r1 → constructor', (p: Problem) => (p.solution[0]!.objects[0]!.id = 'constructor')],
+    ['solution r3 → __proto__', (p: Problem) => (p.solution[2]!.objects[0]!.id = '__proto__')],
+    ['given B → toString', (p: Problem) => (p.givens[1]!.id = 'toString')],
+  ])('Object.prototype names as ids → id (%s)', (_, mutate) => {
+    const p = valid();
+    mutate(p);
+    const r = validate(p);
+    expect(codes(r)).toContain('id');
+    expect(JSON.stringify(r)).not.toContain('native code');
+  });
+
+  test.each([
+    ['constructor', '{"constructor": 5}'],
+    ['toString', '{"toString": "x"}'],
+    ['__proto__', '{"__proto__": {"x": 1}}'],
+  ])('a def with an inherited-name extra key (%s) → shape', (key, extra) => {
+    const json = JSON.stringify(valid()).replace(
+      '"def":{"type":"given-point",',
+      `"def":{${extra.slice(1, -1)},"type":"given-point",`,
+    );
+    const p: unknown = JSON.parse(json);
+    const r = validate(p);
+    expect(codes(r)).toEqual(['shape']);
+    expect(errors(r)[0]?.path).toBe(`givens[0].def.${key}`);
+  });
+
+  test('inherited-name extra keys at top level, in a step and in par → shape', () => {
+    const top = JSON.parse(JSON.stringify(valid()).replace('{', '{"__proto__":{"a":1},'));
+    expect(codes(validate(top))).toEqual(['shape']);
+    const step = JSON.parse(
+      JSON.stringify(valid()).replace('{"objects":', '{"constructor":1,"objects":'),
+    );
+    expect(codes(validate(step))).toEqual(['shape']);
+    const par = JSON.parse(
+      JSON.stringify(valid()).replace('"par":{"L":3,"E":3}', '"par":{"L":3,"toString":3}'),
+    );
+    expect(codes(validate(par))).toEqual(['shape']);
+  });
+
+  test('a label keyed by an Object.prototype name → reference', () => {
+    const p = JSON.parse(
+      JSON.stringify(valid()).replace('"labels":{', '"labels":{"constructor":"K",'),
+    );
+    expect(codes(validate(p))).toEqual(['reference']);
+  });
+
+  test('a step without a nudge passes and is normalised to ""', () => {
+    const p = valid() as unknown as { solution: { nudge?: string }[] };
+    delete p.solution[1]!.nudge;
+    const r = validate(p);
+    expect(errors(r)).toEqual([]);
+    expect(r.ok && r.problem.solution[1]!.nudge).toBe('');
+  });
+
+  test('a sparse givens array → shape', () => {
+    const p = valid();
+    const sparse: unknown[] = [];
+    sparse[0] = p.givens[0];
+    sparse[2] = p.givens[1];
+    expect(codes(validate({ ...p, givens: sparse }))).toEqual(['shape']);
+  });
+
+  test('a throwing getter never throws out of validate', () => {
+    const p: Record<string, unknown> = { ...valid() };
+    Object.defineProperty(p, 'title', {
+      enumerable: true,
+      get() {
+        throw new Error('boom');
+      },
+    });
+    let r: Result | undefined;
+    expect(() => (r = validate(p))).not.toThrow();
+    expect(r && codes(r)).toEqual(['shape']);
+    expect(r && errors(r)[0]?.message).toBe("This file isn't a valid problem.");
+  });
+
+  test('a 5,000,000-char title → limit, quickly', () => {
+    const t0 = performance.now();
+    const r = validate({ ...valid(), title: 'x'.repeat(5_000_000) });
+    expect(performance.now() - t0).toBeLessThan(200);
+    expect(codes(r)).toEqual(['limit']);
+  });
+
+  test.each([
+    ['U+202E', 'Right‮left'],
+    ['U+2028', 'Line sep'],
+    ['U+200B', 'Zero​width'],
+    ['U+2066', 'Iso⁦late'],
+    ['U+FEFF', 'Bom﻿here'],
+  ])('title containing %s → text', (_, title) => {
+    expect(codes(validate({ ...valid(), title }))).toEqual(['text']);
+  });
+});

@@ -107,3 +107,67 @@ describe('parity with built-in level 1', () => {
     expect(playReference(loaded).moves()).toEqual({ L: 4, E: 4 });
   });
 });
+
+describe('mirror-image solutions', () => {
+  const builtIn = levelById('equilateral');
+  const loaded = toLevel(loadProblem(level1Fixture), 'problem:level1m');
+
+  /** Both circles, then the lower apex C and its two lines. */
+  const lower = (l: Level): Construction => {
+    const c = new Construction(l.givens, l.labels, l.sceneDiameter);
+    const add = (objects: ObjSpec[]) => expect(c.apply({ type: 'add', objects }).ok).toBe(true);
+    add([{ id: 'm1', def: { type: 'circle', center: 'A', through: 'B' } }]);
+    add([{ id: 'm2', def: { type: 'circle', center: 'B', through: 'A' } }]);
+    add([{ id: 'm3', def: { type: 'intersection', a: 'm1', b: 'm2', index: 1 } }]);
+    add([{ id: 'm4', def: { type: 'line', a: 'A', b: 'm3' } }]);
+    add([{ id: 'm5', def: { type: 'line', a: 'B', b: 'm3' } }]);
+    return c;
+  };
+
+  test('the lower apex satisfies the built-in goal and the loaded goal', () => {
+    expect(builtIn.goal(lower(builtIn).scene())).not.toBeNull();
+    expect(loaded.goal(lower(loaded).scene())).not.toBeNull();
+  });
+
+  test('gold is the matched variant', () => {
+    const m = loaded.goal(lower(loaded).scene());
+    expect(m?.gold).toHaveLength(3);
+  });
+
+  test('a midpoint target is unaffected', () => {
+    const l = toLevel(loadProblem(perpBisectorFixture), 'problem:pbm');
+    expect(l.goal(playReference(l).scene())).not.toBeNull();
+    const c = new Construction(l.givens, l.labels, l.sceneDiameter);
+    expect(l.goal(c.scene())).toBeNull();
+  });
+
+  test('the variant cap holds for a reference with 10 intersections', () => {
+    const base = loadProblem(level1Fixture);
+    const objs: ObjSpec[] = [
+      { id: 'q1', def: { type: 'circle', center: 'A', through: 'B' } },
+      { id: 'q2', def: { type: 'circle', center: 'B', through: 'A' } },
+    ];
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      objs.push({ id: `x${i}`, def: { type: 'intersection', a: 'q1', b: 'q2', index: 0 } });
+      ids.push(`x${i}`);
+    }
+    // One target depending on every intersection through a chain of lines.
+    objs.push({ id: 'l0', def: { type: 'line', a: 'x0', b: 'x1' } });
+    for (let i = 2; i < 10; i++) {
+      objs.push({ id: `l${i - 1}`, def: { type: 'line', a: `x${i}`, b: 'x0' } });
+    }
+    const goal = toLevel(
+      {
+        ...base,
+        solution: [{ objects: objs, nudge: '' }],
+        targets: ['l0', ...Array.from({ length: 8 }, (_, i) => `l${i + 1}`)].slice(0, 4),
+      },
+      'problem:cap',
+    );
+    const c = new Construction(goal.givens, goal.labels, goal.sceneDiameter);
+    const t0 = performance.now();
+    expect(goal.goal(c.scene())).toBeNull();
+    expect(performance.now() - t0).toBeLessThan(200);
+  });
+});

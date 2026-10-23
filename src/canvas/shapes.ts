@@ -148,7 +148,10 @@ export function curveShapes(v: Curve, vp: Viewport): Shape[] {
  * Ghost preview for a two-point tool from `from` to `to` (world). Lines and bisectors are
  * the full clipped line; a circle is centred at `from` through `to`. Empty when degenerate.
  */
-export function ghostShapes(tool: ToolId, from: Vec, to: Vec, vp: Viewport): Shape[] {
+/** The game's tools plus the two given-line extents the problem editor previews. */
+export type GhostTool = ToolId | 'segment' | 'ray';
+
+export function ghostShapes(tool: GhostTool, from: Vec, to: Vec, vp: Viewport): Shape[] {
   const a = toScreen(vp, from);
   const b = toScreen(vp, to);
   if (dist(a, b) < 1) return [];
@@ -157,6 +160,13 @@ export function ghostShapes(tool: ToolId, from: Vec, to: Vec, vp: Viewport): Sha
     return [
       { key: 'circle', tag: 'path', d: circlePath({ kind: 'circle', c: a, r: dist(a, b) }, b) },
     ];
+  if (tool === 'segment' || tool === 'ray') {
+    const d = sub(b, a);
+    const len = Math.hypot(d.x, d.y);
+    const dir = { kind: 'line' as const, p: a, d: scale(d, 1 / len) };
+    const l = linePath(dir, rect, tool === 'ray' ? { from: a } : { from: a, to: b });
+    return l ? [{ key: 'line', tag: 'line', ...l }] : [];
+  }
   if (tool === 'line') {
     const l = linePathThrough(a, b, rect);
     return l ? [{ key: 'line', tag: 'line', ...l }] : [];

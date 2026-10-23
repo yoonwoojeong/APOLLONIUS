@@ -3,15 +3,22 @@ import { describe } from '../construction/describe';
 import type { ObjId, Scene, SceneObject } from '../construction/types';
 import type { Curve } from '../geometry/curves';
 import type { Vec } from '../geometry/vec';
-import type { GoalMatch, ToolId } from '../levels/types';
+import type { GoalMatch } from '../levels/types';
 import { candidateIntersections, isCurveValue, isPointValue, type Candidate } from './candidates';
-import { curveShapes, curveToScreen, ghostShapes, objectShapes, type Shape } from './shapes';
+import {
+  curveShapes,
+  curveToScreen,
+  ghostShapes,
+  objectShapes,
+  type GhostTool,
+  type Shape,
+} from './shapes';
 import type { SnapTarget } from './snap';
 import { toScreen, type Viewport } from './viewport';
 
 /** Ghost preview of a two-point tool, in world coordinates. */
 export interface GhostView {
-  tool: ToolId;
+  tool: GhostTool;
   from: Vec;
   to: Vec;
   /** Non-zero plays the invalid shake (a new value replays it); `onGhostEnd` fires after. */

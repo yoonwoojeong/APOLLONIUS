@@ -1,0 +1,21 @@
+/* Problem editor. Scoped to editor classes; colours come from the game's tokens. */
+
+.setup-host {
+  touch-action: none;
+}
+
+/* Hidden-circle handles: ring + dot, drawn over the scene, never part of the problem. */
+.setup-handles {
+  pointer-events: none;
+}
+
+.handle-ring {
+  fill: var(--bg);
+  fill-opacity: 0.6;
+  stroke: var(--snap);
+  stroke-width: 1.5px;
+}
+
+.handle-dot {
+  fill: var(--snap);
+}

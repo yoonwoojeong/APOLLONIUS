@@ -144,13 +144,13 @@ export function curveShapes(v: Curve, vp: Viewport): Shape[] {
   return raysFrom(c, c.p, screenRect(vp));
 }
 
-/**
- * Ghost preview for a two-point tool from `from` to `to` (world). Lines and bisectors are
- * the full clipped line; a circle is centred at `from` through `to`. Empty when degenerate.
- */
-/** The game's tools plus the two given-line extents the problem editor previews. */
+/** The game's tools plus the segment and ray extents the problem editor previews. */
 export type GhostTool = ToolId | 'segment' | 'ray';
 
+/**
+ * Ghost preview for a two-point tool from `from` to `to` (world). Lines and bisectors are
+ * the full clipped line; a circle is centred at `from` through `to`. A segment runs from `from` to `to`, a ray from `from` through `to`. Empty when degenerate.
+ */
 export function ghostShapes(tool: GhostTool, from: Vec, to: Vec, vp: Viewport): Shape[] {
   const a = toScreen(vp, from);
   const b = toScreen(vp, to);

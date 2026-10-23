@@ -66,7 +66,11 @@ export const NUDGE_FALLBACK = 'Try the next construction step.';
  * given-line endpoints, and every point-valued solution object (evaluated).
  */
 export function problemPoints(p: Problem): Vec[] {
-  const specs = [...p.givens, ...p.solution.flatMap((s) => s.objects)];
+  return givenPoints([...p.givens, ...p.solution.flatMap((s) => s.objects)]);
+}
+
+/** Framing points of evaluated `specs`: point values, plus c±r on both axes of given circles. */
+export function givenPoints(specs: ObjSpec[]): Vec[] {
   const scene = evaluate(specs, 1);
   const out: Vec[] = [];
   for (const o of scene.objects) {

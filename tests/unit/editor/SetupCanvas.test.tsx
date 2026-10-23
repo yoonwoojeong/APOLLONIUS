@@ -138,3 +138,90 @@ it('a second finger cancels the gesture: nothing is added', () => {
   });
   expect(editor.setup.value.givens).toHaveLength(0);
 });
+
+const gridStep = (host: Element) => host.querySelector('pattern')!.getAttribute('width');
+
+it('placing and dragging points does not change the grid step until a refit', () => {
+  const { host, svg, draw } = mount();
+  const before = gridStep(host);
+  tap(svg, 300, 300);
+  tap(svg, 320, 300);
+  act(() => {
+    pointer(svg, 'pointerdown', 320, 300);
+    pointer(svg, 'pointermove', 330, 300);
+    pointer(svg, 'pointermove', 340, 300);
+    pointer(svg, 'pointerup', 340, 300);
+  });
+  expect(gridStep(host)).toBe(before);
+  const at = () => host.querySelector('[data-kind=point]')!.getAttribute('transform');
+  const placed = at();
+  draw('line');
+  act(() => {
+    svg.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  });
+  expect(at()).not.toBe(placed); // refitted to the two points
+  expect(gridStep(host)).toBe(before); // vp.scale and fitScale agree again
+});
+
+it('a double-click does not refit while the point tool is active', () => {
+  const { host, svg } = mount();
+  const before = gridStep(host);
+  tap(svg, 300, 300);
+  tap(svg, 320, 300);
+  act(() => {
+    svg.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  });
+  expect(gridStep(host)).toBe(before);
+});
+
+function dragged(editor: Editor, svg: Element) {
+  tap(svg, 300, 300);
+  const g = editor.setup.value.givens[0]!;
+  const startPos = (g.def as { pos: unknown }).pos;
+  act(() => {
+    pointer(svg, 'pointerdown', 300, 300);
+    pointer(svg, 'pointermove', 340, 300);
+    pointer(svg, 'pointermove', 380, 320);
+  });
+  expect(editor.setup.value.givens[0]!.def).not.toEqual(g.def);
+  return { id: g.id, startPos };
+}
+
+const unchanged = (editor: Editor, id: string, startPos: unknown) => {
+  expect(editor.setup.value.givens.find((x) => x.id === id)!.def).toMatchObject({
+    pos: startPos,
+  });
+  act(() => editor.undoSetup()); // only the placement is in history
+  expect(editor.setup.value.givens).toHaveLength(0);
+  expect(editor.canUndoSetup.value).toBe(false);
+};
+
+it('a second finger mid point-drag restores the point and leaves history unchanged', () => {
+  const { editor, svg } = mount();
+  const { id, startPos } = dragged(editor, svg);
+  act(() => pointer(svg, 'pointerdown', 500, 400, 2));
+  unchanged(editor, id, startPos);
+});
+
+it('Esc mid point-drag restores the point and leaves history unchanged', () => {
+  const { editor, svg } = mount();
+  const { id, startPos } = dragged(editor, svg);
+  act(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  });
+  unchanged(editor, id, startPos);
+});
+
+it('a tool switch mid point-drag restores the point and leaves history unchanged', () => {
+  const { editor, svg, draw } = mount();
+  const { id, startPos } = dragged(editor, svg);
+  draw('segment');
+  unchanged(editor, id, startPos);
+});
+
+it('two canvases use distinct grid and scene ids', () => {
+  const a = mount();
+  const b = mount();
+  expect(a.host.querySelector('pattern')!.id).not.toBe(b.host.querySelector('pattern')!.id);
+  expect(a.host.querySelector('g[id]')!.id).not.toBe(b.host.querySelector('g[id]')!.id);
+});

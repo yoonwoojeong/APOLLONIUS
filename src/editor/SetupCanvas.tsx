@@ -3,7 +3,7 @@ import { evaluate } from '../construction/evaluate';
 import type { ObjSpec, Scene } from '../construction/types';
 import { dist, sub, type Vec } from '../geometry/vec';
 import { frame } from '../levels/view';
-import { problemPoints, type Problem } from '../problems/format';
+import { givenPoints } from '../problems/format';
 import { Magnifier } from '../canvas/Magnifier';
 import { SceneLayer, type GhostView } from '../canvas/SceneLayer';
 import { gridPattern } from '../canvas/shapes';
@@ -26,6 +26,7 @@ import './editor.css';
 /** Shown until two framing points exist: a 8 x 6 world box centred on the origin. */
 const FALLBACK_BOUNDS: Rect = { x: -4, y: -3, w: 8, h: 6 };
 const FALLBACK_DIAMETER = 10;
+let instances = 0;
 const IDLE: SetupGestureState = { mode: 'idle' };
 
 type Mode = 'none' | 'gesture' | 'pinch' | 'consumed';
@@ -40,9 +41,7 @@ function setupScene(
 ): { scene: Scene; bounds: Rect } {
   const pts = ((): Vec[] => {
     try {
-      return problemPoints({ givens, solution: [] } as unknown as Problem).filter(
-        (p) => Number.isFinite(p.x) && Number.isFinite(p.y),
-      );
+      return givenPoints(givens).filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
     } catch {
       return [];
     }
@@ -70,7 +69,14 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
   );
 
   const svgRef = useRef<SVGSVGElement>(null);
-  const view = useViewport(bounds, 'setup', svgRef);
+  // The viewport fits the bounds of the last fit (mount or double-click refit), so editing
+  // never changes the fit scale (grid step, zoom limits) between fits.
+  const [fitted, setFitted] = useState({ bounds, key: 0 });
+  const view = useViewport(fitted.bounds, fitted.key, svgRef);
+  const [ids] = useState(() => {
+    const n = ++instances;
+    return { grid: `setup-grid-${n}`, root: `setup-scene-${n}` };
+  });
   const { vp, vpRef, size } = view;
 
   const [preview, setPreview] = useState<SetupPreview>(null);
@@ -84,8 +90,8 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
     null,
   );
   const pinch = useRef<{ mid: Vec; d: number } | null>(null);
-  const live = useRef({ scene, tool, hideCentre });
-  live.current = { scene, tool, hideCentre };
+  const live = useRef({ scene, tool, hideCentre, editor, dispatch });
+  live.current = { scene, tool, hideCentre, editor, dispatch };
 
   const local = (e: { clientX: number; clientY: number }): Vec => {
     const r = svgRef.current!.getBoundingClientRect();
@@ -118,7 +124,7 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
 
   function dispatch(ev: SetupEvent): void {
     const before = gesture.current;
-    const { tool: t, hideCentre: hide } = live.current;
+    const { tool: t, hideCentre: hide, editor } = live.current;
     if (ev.type === 'down' && before.mode === 'idle') editor.beginSetupGesture();
     const r = setupReducer(before, ev, {
       tool: t,
@@ -138,14 +144,14 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
 
   // Switching tool mid-gesture abandons it.
   useEffect(() => {
-    if (gesture.current.mode !== 'idle') dispatch({ type: 'tool', tool });
+    if (gesture.current.mode !== 'idle') live.current.dispatch({ type: 'tool', tool });
     setSnap(null);
   }, [tool]);
 
   // A gesture left open on unmount must not keep the editor's snapshot.
   useEffect(
     () => () => {
-      if (gesture.current.mode !== 'idle') editor.cancelSetupGesture();
+      if (gesture.current.mode !== 'idle') live.current.editor.cancelSetupGesture();
     },
     [],
   );
@@ -153,7 +159,8 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
   // Esc abandons the gesture in progress.
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && gesture.current.mode !== 'idle') dispatch({ type: 'cancel' });
+      if (e.key === 'Escape' && gesture.current.mode !== 'idle')
+        live.current.dispatch({ type: 'cancel' });
     };
     window.addEventListener('keydown', down);
     return () => window.removeEventListener('keydown', down);
@@ -271,14 +278,17 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
         onPointerCancel={onPointerCancel}
         onLostPointerCapture={onPointerCancel}
         onPointerLeave={() => setSnap(null)}
-        onDblClick={() => view.refit()}
+        onDblClick={() => {
+          if (live.current.tool === 'point') return;
+          setFitted((f) => ({ bounds, key: f.key + 1 }));
+        }}
         onContextMenu={(e) => e.preventDefault()}
       >
         {grid && (
           <>
             <defs>
               <pattern
-                id="apollonius-grid"
+                id={ids.grid}
                 patternUnits="userSpaceOnUse"
                 width={grid.step}
                 height={grid.step}
@@ -292,12 +302,12 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
               class="grid"
               width="100%"
               height="100%"
-              fill="url(#apollonius-grid)"
+              fill={`url(#${ids.grid})`}
               style={{ opacity: grid.opacity }}
             />
           </>
         )}
-        <g id="scene-root">
+        <g id={ids.root}>
           {vp && (
             <>
               <SceneLayer
@@ -338,7 +348,7 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
           )}
         </g>
       </svg>
-      {size && <Magnifier point={loupe} size={size} />}
+      {size && <Magnifier point={loupe} size={size} sceneId={ids.root} />}
     </div>
   );
 }

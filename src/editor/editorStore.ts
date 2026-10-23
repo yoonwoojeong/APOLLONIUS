@@ -120,19 +120,63 @@ function clampEdit(edit: SetupEdit): SetupEdit {
   }
 }
 
-/** The framing the validator and loader use, with a fallback for a near-empty figure. */
-function frameOf(givens: ObjSpec[], solution: ProblemStep[]): typeof FALLBACK_FRAME {
-  let pts: Vec[];
+/** The points the validator and loader frame (finite ones only). */
+function framingPoints(givens: ObjSpec[], solution: ProblemStep[]): Vec[] {
   try {
-    pts = problemPoints({ givens, solution } as Problem).filter(
+    return problemPoints({ givens, solution } as Problem).filter(
       (p) => Number.isFinite(p.x) && Number.isFinite(p.y),
     );
   } catch {
-    pts = [];
+    return [];
   }
+}
+
+/** The framing the validator and loader use, with a fallback for a near-empty figure. */
+function frameOf(givens: ObjSpec[], solution: ProblemStep[]): typeof FALLBACK_FRAME {
+  const pts = framingPoints(givens, solution);
   if (pts.length < 2) return FALLBACK_FRAME;
   const f = frame(pts);
   return f.sceneDiameter > 0 && Number.isFinite(f.sceneDiameter) ? f : FALLBACK_FRAME;
+}
+
+/**
+ * Solve's view: the validator's frame widened to leave room to construct. The two circles on
+ * the figure's widest pair (each centred on one, through the other) cross at the apexes of the
+ * equilateral triangles on that pair; both apexes (plus a small margin) are kept in view, so
+ * the first crossings an author makes are never off the board. Kept 4:3, centred as before.
+ */
+function solveView(givens: ObjSpec[], solution: ProblemStep[]): Level['view'] {
+  const base = frameOf(givens, solution).view;
+  const pts = framingPoints(givens, solution);
+  let pair: [Vec, Vec] | null = null;
+  let widest = 0;
+  for (let i = 0; i < pts.length; i++)
+    for (let j = i + 1; j < pts.length; j++) {
+      const d = Math.hypot(pts[j]!.x - pts[i]!.x, pts[j]!.y - pts[i]!.y);
+      if (d > widest) [widest, pair] = [d, [pts[i]!, pts[j]!]];
+    }
+  if (!pair || !(widest > 0) || !Number.isFinite(widest)) return base;
+  const [p, q] = pair;
+  const m = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+  const k = Math.sqrt(3) / 2;
+  const margin = 0.2 * widest;
+  let { x: x0, y: y0 } = base;
+  let x1 = base.x + base.w;
+  let y1 = base.y + base.h;
+  for (const s of [1, -1]) {
+    const a = { x: m.x - s * k * (q.y - p.y), y: m.y + s * k * (q.x - p.x) };
+    x0 = Math.min(x0, a.x - margin);
+    x1 = Math.max(x1, a.x + margin);
+    y0 = Math.min(y0, a.y - margin);
+    y1 = Math.max(y1, a.y + margin);
+  }
+  let w = x1 - x0;
+  let h = y1 - y0;
+  if (w / h < 4 / 3) w = (4 / 3) * h;
+  else h = (3 / 4) * w;
+  const cx = (x0 + x1) / 2;
+  const cy = (y0 + y1) / 2;
+  return { x: cx - w / 2, y: cy - h / 2, w, h };
 }
 
 /** A target's identity: its step's signature and its position in that step. */
@@ -480,7 +524,8 @@ export function createEditor(
   const enterSolve = (): void => {
     const { givens, labels } = setup.peek();
     const steps = solution.peek();
-    const { view, sceneDiameter } = frameOf(givens, steps);
+    const { sceneDiameter } = frameOf(givens, steps);
+    const view = solveView(givens, steps);
     const level: Level = {
       id: levelId,
       title: details.peek().title.trim(),

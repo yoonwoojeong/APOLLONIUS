@@ -107,6 +107,26 @@ describe('solve sync', () => {
     expect(ed.broken.value).toBeNull();
   });
 
+  test('Solve frames room to construct: the crossings of circles on the widest pair are in view', () => {
+    const ed = make();
+    addPoints(ed, [
+      [-1, 0],
+      [1, 0],
+    ]);
+    ed.enterSolve();
+    const level = game.currentLevel.value;
+    const v = level.view;
+    for (const y of [Math.sqrt(3), -Math.sqrt(3)]) {
+      // Inside, with a margin: not on the edge of the board.
+      expect(v.y).toBeLessThan(y - 0.3);
+      expect(v.y + v.h).toBeGreaterThan(y + 0.3);
+    }
+    expect(v.x).toBeLessThan(-1.3);
+    expect(v.x + v.w).toBeGreaterThan(1.3);
+    // Only the view widens: lines are evaluated at the validator's scale.
+    expect(level.sceneDiameter).toBeCloseTo(Math.hypot(3.4, 2.55), 6);
+  });
+
   test('re-entering Solve replays the saved steps with their own ids and nudges', () => {
     const ed = make();
     const ids = buildBisector(ed, game);

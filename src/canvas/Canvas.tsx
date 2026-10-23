@@ -439,11 +439,23 @@ export function Canvas({ store, coach, onView }: Props) {
       space.current = false;
       setSpaceHeld(false);
     };
+    // Leaving the window with Space held never delivers its keyup: drop the pan modifier and
+    // stop a pan in progress (the remaining pointers are ignored until they lift).
+    const blur = () => {
+      space.current = false;
+      setSpaceHeld(false);
+      if (mode.current === 'pan') {
+        mode.current = 'consumed';
+        setPanning(false);
+      }
+    };
     window.addEventListener('keydown', down);
     window.addEventListener('keyup', up);
+    window.addEventListener('blur', blur);
     return () => {
       window.removeEventListener('keydown', down);
       window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', blur);
       window.clearTimeout(shakeTimer.current);
       window.clearTimeout(pulseTimer.current);
     };

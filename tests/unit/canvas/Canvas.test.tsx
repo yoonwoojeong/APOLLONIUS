@@ -62,3 +62,24 @@ it('an armed gesture is cleared when the store undoes a step', () => {
   expect(host.querySelector('[data-kind=ghost]')).toBeNull();
   act(() => render(null, host));
 });
+
+it('window blur while Space is held ends the pan mode and a pan in progress', () => {
+  const store = createStore(null);
+  store.openLevel('equilateral');
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  act(() => render(<Canvas store={store} />, host));
+  const svg = host.querySelector('[data-testid=canvas]')!;
+  act(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', cancelable: true }));
+  });
+  expect(svg.classList.contains('is-grab')).toBe(true);
+  act(() => pointer(svg, 'pointerdown', 400, 300));
+  expect(svg.classList.contains('is-panning')).toBe(true);
+  act(() => {
+    window.dispatchEvent(new Event('blur'));
+  });
+  expect(svg.classList.contains('is-panning')).toBe(false);
+  expect(svg.classList.contains('is-grab')).toBe(false);
+  act(() => render(null, host));
+});

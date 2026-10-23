@@ -332,3 +332,12 @@ test('openLevel after a custom level restores normal behaviour', () => {
   expect(s.progress.value.levels.equilateral?.stars[0]).toBe(true);
   expect(m.get(STORAGE_KEY)).toBeDefined();
 });
+
+test('closeCustomLevel resets the tool', () => {
+  const s = createStore(null);
+  s.openCustomLevel(customLevel(), { onExit: () => {}, sandbox: true });
+  s.selectTool('perp-bisector');
+  expect(s.tool.value).toBe('perp-bisector');
+  s.closeCustomLevel('editor');
+  expect(s.tool.value).toBe('point');
+});

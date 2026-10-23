@@ -130,8 +130,6 @@ function frameOf(givens: ObjSpec[], solution: ProblemStep[]): typeof FALLBACK_FR
   return f.sceneDiameter > 0 && Number.isFinite(f.sceneDiameter) ? f : FALLBACK_FRAME;
 }
 
-/** A step's identity: the canonical JSON of its objects (ids included). */
-const sig = (objects: ObjSpec[]): string => canonicalJson(objects);
 /** A target's identity: its step's signature and its position in that step. */
 const targetKey = (stepSig: string, index: number): string => JSON.stringify([stepSig, index]);
 
@@ -223,10 +221,43 @@ export function createEditor(
     for (const s of steps) for (const o of s.objects) knownIds.add(o.id);
   };
 
+  /** Structural forms, interned to short tokens for the editor's lifetime (keeps keys linear). */
+  const interned = new Map<string, string>();
+  const intern = (form: unknown): string => {
+    const text = canonicalJson(form);
+    let token = interned.get(text);
+    if (token === undefined) {
+      token = `s${interned.size}`;
+      interned.set(text, token);
+    }
+    return token;
+  };
+
+  /**
+   * Each step's id-free signature: its objects' defs with every referenced solution object
+   * replaced by that object's structural token. Any other reference (a given — present or
+   * deleted) stays `{ given: id }`: given ids are stable, while solution ids are reissued
+   * whenever Solve reopens, so they never take part.
+   */
+  const sigsOf = (steps: { objects: ObjSpec[] }[]): string[] => {
+    const tokens = new Map<ObjId, string>();
+    const ref = (id: ObjId): string => tokens.get(id) ?? intern({ given: id });
+    return steps.map((st) => {
+      const forms = st.objects.map((o) => {
+        const t = intern(renameDef(o.def, new Map(refIds(o.def).map((r) => [r, ref(r)]))));
+        tokens.set(o.id, t);
+        return t;
+      });
+      return canonicalJson(forms);
+    });
+  };
+
   const keyOf = (id: ObjId): string | null => {
-    for (const s of solution.peek()) {
-      const i = s.objects.findIndex((o) => o.id === id);
-      if (i >= 0) return targetKey(sig(s.objects), i);
+    const steps = solution.peek();
+    const sigs = sigsOf(steps);
+    for (let j = 0; j < steps.length; j++) {
+      const i = steps[j]!.objects.findIndex((o) => o.id === id);
+      if (i >= 0) return targetKey(sigs[j]!, i);
     }
     return null;
   };
@@ -234,10 +265,9 @@ export function createEditor(
   /** Active targets: the remembered ones whose object is in the solution now. */
   const refreshTargets = (): void => {
     const byKey = new Map<string, ObjId>();
-    for (const s of solution.peek()) {
-      const ss = sig(s.objects);
-      s.objects.forEach((o, i) => byKey.set(targetKey(ss, i), o.id));
-    }
+    const steps = solution.peek();
+    const sigs = sigsOf(steps);
+    steps.forEach((s, j) => s.objects.forEach((o, i) => byKey.set(targetKey(sigs[j]!, i), o.id)));
     const next = [...targetKeys].flatMap((k) => {
       const id = byKey.get(k);
       return id === undefined ? [] : [id];
@@ -246,7 +276,7 @@ export function createEditor(
   };
 
   remember(opened.solution);
-  for (const s of opened.solution) nudges.set(sig(s.objects), s.nudge);
+  sigsOf(opened.solution).forEach((k, i) => nudges.set(k, opened.solution[i]!.nudge));
   for (const t of opened.targets) {
     const k = keyOf(t);
     if (k) targetKeys.add(k);
@@ -407,28 +437,22 @@ export function createEditor(
     const all = [...taken, ...knownIds, ...tail.flatMap((s) => s.objects.map((o) => o.id))];
     let n = Math.max(0, ...all.map(idNumber));
     const map = new Map(clashes.map((id) => [id, `o${++n}`]));
-    tail = tail.map((s) => {
-      const objects = s.objects.map((o) => ({
-        id: map.get(o.id) ?? o.id,
-        def: renameDef(o.def, map),
-      }));
-      const before = sig(s.objects);
-      const after = sig(objects);
-      if (nudges.has(before)) nudges.set(after, nudges.get(before)!);
-      objects.forEach((_, i) => {
-        if (targetKeys.delete(targetKey(before, i))) targetKeys.add(targetKey(after, i));
-      });
-      return { ...s, objects };
-    });
+    // Signatures are id-free, so renamed steps keep their nudges and targets as they are.
+    tail = tail.map((s) => ({
+      ...s,
+      objects: s.objects.map((o) => ({ id: map.get(o.id) ?? o.id, def: renameDef(o.def, map) })),
+    }));
     remember(tail);
   };
 
   const syncFromGame = (): void => {
     const gameSteps = game.construction().steps();
     dedupeTail(gameSteps);
-    remember(gameSteps.map((objects) => ({ objects })));
+    const fromGame = gameSteps.map((objects) => ({ objects }));
+    remember(fromGame);
+    const sigs = sigsOf([...fromGame, ...tail]);
     solution.value = [
-      ...gameSteps.map((objects) => ({ objects, nudge: nudges.get(sig(objects)) ?? '' })),
+      ...gameSteps.map((objects, i) => ({ objects, nudge: nudges.get(sigs[i]!) ?? '' })),
       ...tail,
     ];
     refreshTargets();
@@ -487,7 +511,7 @@ export function createEditor(
     const steps = solution.peek();
     if (!steps[i]) return;
     const step = { ...steps[i], nudge: text };
-    nudges.set(sig(step.objects), text);
+    nudges.set(sigsOf(steps)[i]!, text);
     solution.value = steps.map((s, j) => (j === i ? step : s));
     const g = i - (steps.length - tail.length);
     if (g >= 0) tail = tail.map((s, j) => (j === g ? step : s));
@@ -505,9 +529,9 @@ export function createEditor(
   const removeFrom = (i: number): void => {
     const steps = solution.peek();
     if (i < 0 || i >= steps.length) return;
-    for (const s of steps.slice(i)) {
-      const ss = sig(s.objects);
-      s.objects.forEach((_, j) => targetKeys.delete(targetKey(ss, j)));
+    const sigs = sigsOf(steps);
+    for (let k = i; k < steps.length; k++) {
+      steps[k]!.objects.forEach((_, j) => targetKeys.delete(targetKey(sigs[k]!, j)));
     }
     if (solving()) {
       const gameLen = steps.length - tail.length;

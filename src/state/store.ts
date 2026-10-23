@@ -175,6 +175,7 @@ export function createStore(storage: Storage | null) {
       lastResult.value = null;
       hintTier.value = 0;
       maxTier = 0;
+      tool.value = 'point';
       revision.value++;
       lastStep = hint.peek()?.stepIndex ?? null;
       screen.value = to;

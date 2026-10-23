@@ -571,3 +571,61 @@ describe('fix round 1', () => {
     expect(game.isCustom.value).toBe(false);
   });
 });
+
+describe('fix round 2: id-free step signatures', () => {
+  test('a different construction reusing the same ids inherits no target or nudge', () => {
+    const ed = make();
+    const ids = buildBisector(ed, game);
+    const [c] = addPointsLater(ed) as [string];
+    ed.enterSolve();
+    expect(ed.solution.value).toHaveLength(4);
+    ed.setNudge(2, 'NUDGE-INTERSECT');
+    ed.setNudge(3, 'NUDGE-LINE');
+    ed.toggleTarget(ids.line);
+    for (let i = 0; i < 4; i++) game.undo();
+    expect(ed.solution.value).toEqual([]);
+    ed.setMode('setup');
+    ed.enterSolve();
+    const [k1] = add(game, [{ type: 'circle', center: ids.b, through: c }]) as [string];
+    const [k2] = add(game, [{ type: 'circle', center: c, through: ids.b }]) as [string];
+    const [p, q] = add(game, [
+      { type: 'intersection', a: k1, b: k2, index: 0 },
+      { type: 'intersection', a: k1, b: k2, index: 1 },
+    ]) as [string, string];
+    const [line] = add(game, [{ type: 'line', a: p, b: q }]) as [string];
+    expect([k1, k2, p, q, line]).toEqual([ids.c1, ids.c2, ids.p, ids.q, ids.line]);
+    expect(ed.targets.value).toEqual([]);
+    expect(ed.solution.value.map((s) => s.nudge)).toEqual(['', '', '', '']);
+  });
+
+  test('a step renamed by the broken-tail dedupe keeps its nudge and target', () => {
+    const ed = make();
+    const ids = buildBisector(ed, game);
+    ed.setNudge(3, 'Join them.');
+    ed.toggleTarget(ids.line);
+    ed.setMode('setup');
+    ed.applySetup({ type: 'delete', ids: [ids.a] });
+    const [c] = addPoints(ed, [[-1, 0]]) as [string];
+    ed.enterSolve();
+    // The game reissues o1..o5 to new steps, so every tail id clashes and is renamed.
+    const [k1] = add(game, [{ type: 'circle', center: c, through: ids.b }]) as [string];
+    const [k2] = add(game, [{ type: 'circle', center: ids.b, through: c }]) as [string];
+    const [p, q] = add(game, [
+      { type: 'intersection', a: k1, b: k2, index: 0 },
+      { type: 'intersection', a: k1, b: k2, index: 1 },
+    ]) as [string, string];
+    const [line] = add(game, [{ type: 'line', a: p, b: q }]) as [string];
+    expect(line).toBe(ids.line);
+    expect(ed.solution.value).toHaveLength(8);
+    const tailLine = ed.solution.value[7]!;
+    expect(tailLine.objects[0]!.id).not.toBe(ids.line);
+    expect(tailLine.nudge).toBe('Join them.');
+    expect(ed.targets.value).toEqual([tailLine.objects[0]!.id]);
+  });
+});
+
+/** Adds a point C above AB (Setup mode). */
+function addPointsLater(ed: Editor): string[] {
+  ed.setMode('setup');
+  return addPoints(ed, [[0, 2]]);
+}

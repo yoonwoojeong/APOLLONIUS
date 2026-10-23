@@ -279,6 +279,32 @@ test('custom level in sandbox mode never completes', () => {
   expect(onComplete).not.toHaveBeenCalled();
 });
 
+test('replayLevel is a no-op on a sandbox', () => {
+  const s = createStore(null);
+  s.openCustomLevel(customLevel(), { onExit: () => {}, sandbox: true });
+  playReferenceInto(s);
+  s.screen.value = 'editor';
+  s.replayLevel();
+  expect(s.construction().steps()).toHaveLength(customLevel().reference.length);
+  expect(s.screen.value).toBe('editor');
+});
+
+test('closeCustomLevel drops the custom level without calling onExit', () => {
+  const s = createStore(null);
+  const onExit = vi.fn();
+  s.openCustomLevel(customLevel(), { onExit, sandbox: true });
+  playReferenceInto(s);
+  s.closeCustomLevel('editor');
+  expect(onExit).not.toHaveBeenCalled();
+  expect(s.isCustom.value).toBe(false);
+  expect(s.screen.value).toBe('editor');
+  expect(s.construction().steps()).toEqual([]);
+  s.undo();
+  expect(s.construction().steps()).toEqual([]);
+  s.exitCustomLevel();
+  expect(onExit).not.toHaveBeenCalled();
+});
+
 test('replayLevel reopens a custom level with the same options', () => {
   const s = createStore(null);
   const onComplete = vi.fn();

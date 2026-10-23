@@ -465,3 +465,109 @@ describe('autosave', () => {
     expect(m.get(DRAFTS_KEY)).toBeUndefined();
   });
 });
+
+describe('fix round 1', () => {
+  test('a nudge survives undo/redo of its own step', () => {
+    const ed = make();
+    buildBisector(ed, game);
+    ed.setNudge(3, 'Join the crossings.');
+    game.undo();
+    expect(ed.solution.value).toHaveLength(3);
+    game.redo();
+    expect(ed.solution.value[3]!.nudge).toBe('Join the crossings.');
+  });
+
+  test('Reset then Undo in Solve restores every nudge', () => {
+    const ed = make();
+    buildBisector(ed, game);
+    ['one', 'two', 'three', 'four'].forEach((t, i) => ed.setNudge(i, t));
+    game.reset();
+    expect(ed.solution.value).toEqual([]);
+    game.undo();
+    expect(ed.solution.value.map((s) => s.nudge)).toEqual(['one', 'two', 'three', 'four']);
+  });
+
+  test("the game's Back in Solve returns to the editor in Setup", () => {
+    const ed = make();
+    buildBisector(ed, game);
+    game.exitCustomLevel();
+    expect(ed.mode.value).toBe('setup');
+    expect(game.screen.value).toBe('editor');
+    expect(game.isCustom.value).toBe(false);
+    expect(ed.solution.value).toHaveLength(4);
+  });
+
+  test('an undone target is not inherited by a new object, and returns with its own', () => {
+    const ed = make();
+    const ids = buildBisector(ed, game);
+    ed.toggleTarget(ids.line);
+    const original = game.construction().steps()[3]!;
+    game.undo();
+    expect(ed.targets.value).toEqual([]);
+    game.redo();
+    expect(ed.targets.value).toEqual([ids.line]);
+
+    game.undo();
+    const [other] = add(game, [{ type: 'line', a: ids.a, b: ids.b }]) as [string];
+    expect(ed.targets.value).toEqual([]);
+    expect(ed.problem.value.targets).toEqual([]);
+    game.undo();
+    expect(game.apply({ type: 'add', objects: original }).ok).toBe(true);
+    expect(ed.targets.value).toEqual([ids.line]);
+    expect(ed.targets.value).not.toContain(other);
+  });
+
+  test('a target on a removed step is pruned', () => {
+    const ed = make();
+    const ids = buildBisector(ed, game);
+    ed.toggleTarget(ids.line);
+    ed.removeFrom(3);
+    expect(ed.targets.value).toEqual([]);
+    ed.toggleTarget('nope');
+    expect(ed.targets.value).toEqual([]);
+  });
+
+  test('after reopening, a new point never takes an id a broken step refers to', () => {
+    const d = draft();
+    const ed1 = make(null, d);
+    const { a } = buildBisector(ed1, game);
+    ed1.setMode('setup');
+    ed1.applySetup({ type: 'delete', ids: [a] });
+    expect(ed1.broken.value).toBe(0);
+    d.problem = ed1.problem.value;
+    const ed2 = make(null, d);
+    const [fresh] = addPoints(ed2, [[-1, 0]]) as [string];
+    expect(fresh).not.toBe(a);
+    expect(ed2.broken.value).toBe(0);
+    expect(ed2.solution.value).toHaveLength(4);
+  });
+
+  test('dispose saves a pending edit', () => {
+    vi.useFakeTimers();
+    const { storage, m } = memStorage();
+    const ed = make(storage);
+    ed.setDetails({ title: 'Pending' });
+    ed.dispose();
+    expect(JSON.parse(m.get(DRAFTS_KEY)!).drafts[0].problem.title).toBe('Pending');
+  });
+
+  test('leaving Solve closes the sandbox so game input cannot reach it', () => {
+    const ed = make();
+    buildBisector(ed, game);
+    ed.setMode('details');
+    expect(game.isCustom.value).toBe(false);
+    expect(game.screen.value).toBe('editor');
+    const before = ed.solution.value;
+    game.undo();
+    expect(ed.solution.value).toBe(before);
+    expect(game.construction().steps()).toEqual([]);
+  });
+
+  test('a Setup edit during Solve closes the sandbox too', () => {
+    const ed = make();
+    const { b } = buildBisector(ed, game);
+    ed.applySetup({ type: 'move', id: b, pos: { x: 1.1, y: 0 } });
+    expect(ed.mode.value).toBe('setup');
+    expect(game.isCustom.value).toBe(false);
+  });
+});

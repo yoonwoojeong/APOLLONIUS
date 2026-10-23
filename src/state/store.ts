@@ -162,8 +162,26 @@ export function createStore(storage: Storage | null) {
     exitCustomLevel(): void {
       custom.peek()?.onExit();
     },
-    /** Reopens the current level from scratch (a custom one with the same options). */
+    /**
+     * Closes the open custom level without calling its onExit: the store falls back to an empty
+     * construction of the first built-in level, so stray game input cannot touch the old one.
+     */
+    closeCustomLevel(to: 'problems' | 'editor'): void {
+      if (!custom.peek()) return;
+      custom.value = null;
+      currentLevel.value = LEVELS[0]!;
+      construction = newConstruction(level());
+      completion.value = null;
+      lastResult.value = null;
+      hintTier.value = 0;
+      maxTier = 0;
+      revision.value++;
+      lastStep = hint.peek()?.stepIndex ?? null;
+      screen.value = to;
+    },
+    /** Reopens the current level from scratch (a custom one with the same options); not a sandbox. */
     replayLevel(): void {
+      if (custom.peek()?.sandbox) return;
       open(level(), custom.peek());
     },
     selectTool(t: ToolId): void {

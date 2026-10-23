@@ -130,8 +130,18 @@ function frameOf(givens: ObjSpec[], solution: ProblemStep[]): typeof FALLBACK_FR
   return f.sceneDiameter > 0 && Number.isFinite(f.sceneDiameter) ? f : FALLBACK_FRAME;
 }
 
-const sameObjects = (a: ObjSpec[] | undefined, b: ObjSpec[]): boolean =>
-  !!a && canonicalJson(a) === canonicalJson(b);
+/** A step's identity: the canonical JSON of its objects (ids included). */
+const sig = (objects: ObjSpec[]): string => canonicalJson(objects);
+/** A target's identity: its step's signature and its position in that step. */
+const targetKey = (stepSig: string, index: number): string => JSON.stringify([stepSig, index]);
+
+/** Ids a def refers to. */
+function refIds(def: ObjDef): ObjId[] {
+  const d = def as Record<string, unknown>;
+  return ['a', 'b', 'center', 'through', 'curve']
+    .map((k) => (Object.hasOwn(d, k) ? d[k] : undefined))
+    .filter((v): v is ObjId => typeof v === 'string');
+}
 
 function renameDef(def: ObjDef, map: Map<ObjId, ObjId>): ObjDef {
   const r = (id: ObjId): ObjId => map.get(id) ?? id;
@@ -170,7 +180,7 @@ export function createEditor(
   const mode = signal<EditorMode>('setup');
   const setup = signal<SetupModel>(opened.setup);
   const solution = signal<ProblemStep[]>(opened.solution);
-  const targets = signal<ObjId[]>(opened.targets);
+  const targets = signal<ObjId[]>([]);
   const details = signal<EditorDetails>(opened.details);
   const testedHash = signal<string | undefined>(
     typeof draft.testedHash === 'string' ? draft.testedHash : undefined,
@@ -203,9 +213,45 @@ export function createEditor(
     if (par && par.L === m.L && par.E === m.E) details.value = { ...details.peek(), par: null };
   }
 
-  const solutionIds = computed(
-    () => new Set(solution.value.flatMap((s) => s.objects.map((o) => o.id))),
-  );
+  /** Every nudge ever written, by step signature: undo/redo or Reset+Undo bring them back. */
+  const nudges = new Map<string, string>();
+  /** Targets by step signature + object position, so an undone target returns on redo. */
+  const targetKeys = new Set<string>();
+  /** Every solution object id this editor has seen (never reused for something else). */
+  const knownIds = new Set<ObjId>();
+  const remember = (steps: { objects: ObjSpec[] }[]): void => {
+    for (const s of steps) for (const o of s.objects) knownIds.add(o.id);
+  };
+
+  const keyOf = (id: ObjId): string | null => {
+    for (const s of solution.peek()) {
+      const i = s.objects.findIndex((o) => o.id === id);
+      if (i >= 0) return targetKey(sig(s.objects), i);
+    }
+    return null;
+  };
+
+  /** Active targets: the remembered ones whose object is in the solution now. */
+  const refreshTargets = (): void => {
+    const byKey = new Map<string, ObjId>();
+    for (const s of solution.peek()) {
+      const ss = sig(s.objects);
+      s.objects.forEach((o, i) => byKey.set(targetKey(ss, i), o.id));
+    }
+    const next = [...targetKeys].flatMap((k) => {
+      const id = byKey.get(k);
+      return id === undefined ? [] : [id];
+    });
+    if (JSON.stringify(next) !== JSON.stringify(targets.peek())) targets.value = next;
+  };
+
+  remember(opened.solution);
+  for (const s of opened.solution) nudges.set(sig(s.objects), s.nudge);
+  for (const t of opened.targets) {
+    const k = keyOf(t);
+    if (k) targetKeys.add(k);
+  }
+  refreshTargets();
 
   const problem = computed((): DraftProblem => {
     const d = details.value;
@@ -224,8 +270,7 @@ export function createEditor(
       givens,
       labels,
       solution: solution.value.map((s) => ({ objects: s.objects, nudge: s.nudge.trim() })),
-      // Targets whose object is gone (e.g. undone in Solve) come back with it on redo.
-      targets: targets.value.filter((t) => solutionIds.value.has(t)),
+      targets: targets.value,
       par: d.par ? { L: Math.max(d.par.L, m.L), E: Math.max(d.par.E, m.E) } : m,
     };
   });
@@ -253,8 +298,14 @@ export function createEditor(
   let idCounter = 0;
   let pendingLabels = new Set<string>();
 
+  /** Ids a new given must not take: anything in, referred to by, or ever seen in the problem. */
   const usedIds = (): Set<ObjId> =>
-    new Set([...setup.peek().givens.map((g) => g.id), ...solutionIds.peek()]);
+    new Set([
+      ...setup.peek().givens.map((g) => g.id),
+      ...solution.peek().flatMap((s) => s.objects.flatMap((o) => [o.id, ...refIds(o.def)])),
+      ...targets.peek(),
+      ...knownIds,
+    ]);
 
   /** A fresh `g<n>` id; successive calls never repeat. */
   const allocId = (): ObjId => {
@@ -275,8 +326,7 @@ export function createEditor(
 
   /** A Setup change makes an open Solve sandbox stale, so leave Solve. */
   const leaveSolve = (): void => {
-    sandbox = null;
-    tail = [];
+    closeSandbox();
     if (mode.peek() === 'solve') mode.value = 'setup';
   };
 
@@ -338,6 +388,13 @@ export function createEditor(
   let tail: ProblemStep[] = [];
   let replaying = false;
 
+  /** Closes the sandbox in the game (without its onExit), so stray input can't reach it. */
+  function closeSandbox(): void {
+    if (sandbox && game.currentLevel.peek() === sandbox) game.closeCustomLevel('editor');
+    sandbox = null;
+    tail = [];
+  }
+
   /** Renames tail objects whose ids a new game step took, so ids stay unique. */
   const dedupeTail = (gameSteps: ObjSpec[][]): void => {
     const taken = new Set([
@@ -346,27 +403,35 @@ export function createEditor(
     ]);
     const clashes = tail.flatMap((s) => s.objects.map((o) => o.id)).filter((id) => taken.has(id));
     if (!clashes.length) return;
-    const all = [...taken, ...tail.flatMap((s) => s.objects.map((o) => o.id))];
+    // Fresh ids lie beyond every id seen, so a renamed object never takes a remembered one.
+    const all = [...taken, ...knownIds, ...tail.flatMap((s) => s.objects.map((o) => o.id))];
     let n = Math.max(0, ...all.map(idNumber));
     const map = new Map(clashes.map((id) => [id, `o${++n}`]));
-    tail = tail.map((s) => ({
-      ...s,
-      objects: s.objects.map((o) => ({ id: map.get(o.id) ?? o.id, def: renameDef(o.def, map) })),
-    }));
-    targets.value = targets.peek().map((t) => map.get(t) ?? t);
+    tail = tail.map((s) => {
+      const objects = s.objects.map((o) => ({
+        id: map.get(o.id) ?? o.id,
+        def: renameDef(o.def, map),
+      }));
+      const before = sig(s.objects);
+      const after = sig(objects);
+      if (nudges.has(before)) nudges.set(after, nudges.get(before)!);
+      objects.forEach((_, i) => {
+        if (targetKeys.delete(targetKey(before, i))) targetKeys.add(targetKey(after, i));
+      });
+      return { ...s, objects };
+    });
+    remember(tail);
   };
 
   const syncFromGame = (): void => {
     const gameSteps = game.construction().steps();
     dedupeTail(gameSteps);
-    const prev = solution.peek();
+    remember(gameSteps.map((objects) => ({ objects })));
     solution.value = [
-      ...gameSteps.map((objects, i) => ({
-        objects,
-        nudge: sameObjects(prev[i]?.objects, objects) ? prev[i]!.nudge : '',
-      })),
+      ...gameSteps.map((objects) => ({ objects, nudge: nudges.get(sig(objects)) ?? '' })),
       ...tail,
     ];
+    refreshTargets();
   };
 
   const solving = (): boolean =>
@@ -403,7 +468,7 @@ export function createEditor(
       sandbox = level;
       tail = [];
       mode.value = 'solve';
-      game.openCustomLevel(level, { sandbox: true, onExit: exit });
+      game.openCustomLevel(level, { sandbox: true, onExit: () => setMode('setup') });
       game.screen.value = 'editor';
       for (let i = 0; i < steps.length; i++) {
         if (!game.apply({ type: 'add', objects: steps[i]!.objects }).ok) {
@@ -422,22 +487,28 @@ export function createEditor(
     const steps = solution.peek();
     if (!steps[i]) return;
     const step = { ...steps[i], nudge: text };
+    nudges.set(sig(step.objects), text);
     solution.value = steps.map((s, j) => (j === i ? step : s));
     const g = i - (steps.length - tail.length);
     if (g >= 0) tail = tail.map((s, j) => (j === g ? step : s));
   };
 
+  /** Toggles a solution object as a target (ids not in the solution are ignored). */
   const toggleTarget = (id: ObjId): void => {
-    const t = targets.peek();
-    targets.value = t.includes(id) ? t.filter((x) => x !== id) : [...t, id];
+    const k = keyOf(id);
+    if (!k) return;
+    if (!targetKeys.delete(k)) targetKeys.add(k);
+    refreshTargets();
   };
 
   /** Drops steps ≥ i (and targets on them); in Solve the game construction is trimmed too. */
   const removeFrom = (i: number): void => {
     const steps = solution.peek();
     if (i < 0 || i >= steps.length) return;
-    const gone = new Set(steps.slice(i).flatMap((s) => s.objects.map((o) => o.id)));
-    targets.value = targets.peek().filter((t) => !gone.has(t));
+    for (const s of steps.slice(i)) {
+      const ss = sig(s.objects);
+      s.objects.forEach((_, j) => targetKeys.delete(targetKey(ss, j)));
+    }
     if (solving()) {
       const gameLen = steps.length - tail.length;
       tail = i >= gameLen ? tail.slice(0, i - gameLen) : [];
@@ -450,6 +521,7 @@ export function createEditor(
       syncFromGame();
     } else {
       solution.value = steps.slice(0, i);
+      refreshTargets();
     }
   };
 
@@ -469,8 +541,7 @@ export function createEditor(
       enterSolve();
       return;
     }
-    sandbox = null;
-    tail = [];
+    closeSandbox();
     mode.value = m;
     game.screen.value = 'editor';
   };
@@ -483,8 +554,7 @@ export function createEditor(
     if (!v.ok) return false;
     const hash = problemHash(problem.peek() as Problem);
     const level = toLevel(structuredClone(v.problem), levelId);
-    sandbox = null;
-    tail = [];
+    closeSandbox();
     mode.value = 'test';
     game.openCustomLevel(level, {
       onComplete: (s) => {
@@ -549,6 +619,7 @@ export function createEditor(
   let disposed = false;
   const dispose = (): void => {
     if (disposed) return;
+    save(); // never drop a pending edit
     disposed = true;
     if (timer !== undefined) clearTimeout(timer);
     timer = undefined;
@@ -561,9 +632,8 @@ export function createEditor(
 
   /** Saves now and returns to My problems. */
   function exit(): void {
-    save();
-    dispose();
-    sandbox = null;
+    dispose(); // saves first
+    closeSandbox();
     game.screen.value = 'problems';
   }
 

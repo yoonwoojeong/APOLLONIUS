@@ -7,7 +7,7 @@ import { FALLBACK } from '../../../src/levels/explain';
 import type { Level } from '../../../src/levels/types';
 import { isRobust, mulberry32 } from '../../../src/reasoning/robustness';
 import { nextHint } from '../../../src/reasoning/hints';
-import { NUDGE_FALLBACK, type Problem } from '../../../src/problems/format';
+import { NUDGE_FALLBACK, problemPoints, type Problem } from '../../../src/problems/format';
 import { toLevel } from '../../../src/problems/load';
 import { validate } from '../../../src/problems/validate';
 import level1Fixture from '../../fixtures/problems/level1.json';
@@ -43,6 +43,27 @@ describe('toLevel', () => {
     const l = toLevel(loadProblem(perpBisectorFixture), 'problem:pb');
     expect(l.goal(playReference(l).scene())).not.toBeNull();
     expect(isRobust(l, specsOf(l), mulberry32(7))).toBe(true);
+  });
+
+  test('play and validation frame every solution circle whole (centre ± r on both axes)', () => {
+    const p = loadProblem(level1Fixture);
+    const pts = problemPoints(p);
+    // Circles A→B (centre -1, r 2) and B→A (centre 1, r 2).
+    for (const q of [
+      { x: -3, y: 0 },
+      { x: 3, y: 0 },
+      { x: -1, y: 2 },
+      { x: -1, y: -2 },
+      { x: 1, y: 2 },
+      { x: 1, y: -2 },
+    ]) {
+      expect(pts.some((v) => Math.abs(v.x - q.x) < 1e-9 && Math.abs(v.y - q.y) < 1e-9)).toBe(true);
+    }
+    const { view } = toLevel(p, 'problem:x');
+    expect(view.x).toBeLessThan(-3);
+    expect(view.x + view.w).toBeGreaterThan(3);
+    expect(view.y).toBeLessThan(-2);
+    expect(view.y + view.h).toBeGreaterThan(2);
   });
 
   test('explain falls back when the problem has none', () => {

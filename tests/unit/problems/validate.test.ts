@@ -61,9 +61,10 @@ describe('validate: valid problems', () => {
 
   test('a free point that the target does not depend on is fine', () => {
     const p = valid();
-    // A free point off to the side, then the reference construction.
+    // A free point off to the side (well clear of the lower crossing at the framed scale), then
+    // the reference construction.
     p.solution.unshift({
-      objects: [{ id: 'f', def: { type: 'free-point', pos: { x: 0.4, y: -0.9 } } }],
+      objects: [{ id: 'f', def: { type: 'free-point', pos: { x: 1.6, y: -0.9 } } }],
       nudge: '',
     });
     expect(errors(validate(p))).toEqual([]);
@@ -389,9 +390,10 @@ describe('validate: par and tappability', () => {
   });
 
   test('crossing 6 px from a point → untappable', () => {
-    const r = validate(nearCrossing(0.14));
+    // 0.19 world units at the framed scale (both circles whole in view) is about 6 px.
+    const r = validate(nearCrossing(0.19));
     expect(codes(r)).toEqual(['untappable']);
-    const p = nearCrossing(0.14);
+    const p = nearCrossing(0.19);
     const issues = tooCloseCrossings(
       p.givens,
       p.solution.map((s) => s.objects),

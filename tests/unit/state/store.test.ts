@@ -177,3 +177,55 @@ test('setTheme persists', () => {
   s.setTheme('dark');
   expect(createStore(storage).progress.value.theme).toBe('dark');
 });
+
+test('undo after solving clears the completion; redo completes again', () => {
+  const { storage } = memStorage();
+  const s = createStore(storage);
+  s.openLevel('equilateral');
+  playReferenceInto(s);
+  const first = s.completion.value;
+  expect(first).not.toBeNull();
+  s.undo();
+  expect(s.completion.value).toBeNull();
+  // Progress already earned stays.
+  expect(s.progress.value.levels.equilateral?.stars).toEqual(first?.stars);
+  s.redo();
+  expect(s.completion.value?.stars).toEqual(first?.stars);
+});
+
+test('reset after solving clears the completion; solving again completes again', () => {
+  const s = createStore(null);
+  s.openLevel('equilateral');
+  playReferenceInto(s);
+  expect(s.completion.value).not.toBeNull();
+  s.reset();
+  expect(s.completion.value).toBeNull();
+  expect(s.progress.value.levels.equilateral?.stars[0]).toBe(true);
+  playReferenceInto(s);
+  expect(s.completion.value).not.toBeNull();
+});
+
+test('adding more after solving keeps the completion', () => {
+  const s = createStore(null);
+  s.openLevel('equilateral');
+  playReferenceInto(s);
+  const first = s.completion.value;
+  s.apply({
+    type: 'add',
+    objects: [{ id: 'x', def: { type: 'free-point', pos: { x: 5, y: 5 } } }],
+  });
+  expect(s.completion.value).toBe(first);
+});
+
+test('a second completion in one visit reports the unlock only once', () => {
+  const s = createStore(null);
+  s.openLevel('midpoint');
+  playReferenceInto(s);
+  expect(s.completion.value?.unlocked).toBe('perp-bisector');
+  s.undo();
+  expect(s.completion.value).toBeNull();
+  s.redo();
+  expect(s.completion.value).not.toBeNull();
+  expect(s.completion.value?.unlocked).toBeUndefined();
+  expect(s.progress.value.unlockedTools.filter((t) => t === 'perp-bisector')).toHaveLength(1);
+});

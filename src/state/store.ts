@@ -54,12 +54,17 @@ export function createStore(storage: Storage | null) {
   const availableTools = (): ToolId[] =>
     level().tools.filter((t) => t !== 'perp-bisector' || progress.value.unlockedTools.includes(t));
 
+  /** Re-evaluates the goal after every change: sets the completion, or clears a stale one. */
   const checkCompletion = (): void => {
-    if (completion.peek()) return;
     const l = level();
     const scene = construction.scene();
     const match = l.goal(scene);
-    if (!match || !isRobust(l, construction.specs())) return;
+    const met = !!match && isRobust(l, construction.specs());
+    if (completion.peek()) {
+      if (!met) completion.value = null;
+      return;
+    }
+    if (!match || !met) return;
     const stars = scoreStars(construction.moves(), l.targets);
     const old = progress.value.levels[l.id];
     const merged = old ? mergeStars(old.stars, stars) : stars;

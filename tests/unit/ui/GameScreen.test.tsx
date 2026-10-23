@@ -228,6 +228,20 @@ describe('GameScreen hints, completion and reveal', () => {
     expect(host.querySelector('.completion')).toBeNull();
   });
 
+  it('Ctrl+Z with the card open un-solves: the card goes and focus moves to the canvas', () => {
+    const store = createStore(null);
+    store.openLevel('equilateral');
+    const host = mount(store);
+    act(() => playReferenceInto(store));
+    expect(host.querySelector('.completion')).not.toBeNull();
+    key({ key: 'z', ctrlKey: true });
+    expect(store.completion.value).toBeNull();
+    expect(host.querySelector('.completion')).toBeNull();
+    expect(document.activeElement).toBe(host.querySelector('[data-testid="canvas"]'));
+    key({ key: 'y', ctrlKey: true });
+    expect(host.querySelector('.completion')).not.toBeNull();
+  });
+
   it('Replay reopens the same level', () => {
     const store = createStore(null);
     store.openLevel('equilateral');

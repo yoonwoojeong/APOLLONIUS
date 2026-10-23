@@ -199,6 +199,20 @@ export function GameScreen({ store }: { store: Store }) {
     if (!active || active === document.body) hintBtn.current?.focus({ preventScroll: true });
   }, [showHint, completion]);
 
+  // When an undo or reset un-solves the level, the card unmounts; keep focus in the game.
+  const canvasHost = useRef<HTMLElement>(null);
+  const wasCompleted = useRef(false);
+  useEffect(() => {
+    const was = wasCompleted.current;
+    wasCompleted.current = !!completion;
+    if (!was || completion) return;
+    const active = document.activeElement;
+    if (!active || active === document.body)
+      canvasHost.current
+        ?.querySelector<SVGSVGElement>('[data-testid="canvas"]')
+        ?.focus({ preventScroll: true });
+  }, [completion]);
+
   const onHint = (): void => {
     if (completion) return;
     if (showHint) {
@@ -271,7 +285,7 @@ export function GameScreen({ store }: { store: Store }) {
         tipTool={tipCfg?.tool ?? null}
         onTipDismiss={() => setTip(null)}
       />
-      <main class="game-canvas" onPointerDown={() => setHintOpen(false)}>
+      <main class="game-canvas" ref={canvasHost} onPointerDown={() => setHintOpen(false)}>
         <Canvas store={store} coach={coachTargets} onView={coachActive ? onView : undefined} />
         {coachActive && (
           <CoachOverlay

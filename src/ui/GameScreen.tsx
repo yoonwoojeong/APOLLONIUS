@@ -1,9 +1,10 @@
 import { useSignal, type Signal } from '@preact/signals';
+import type { ComponentChildren } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { Canvas } from '../canvas/Canvas';
 import { isPointValue } from '../canvas/candidates';
 import { toScreen, type Viewport } from '../canvas/viewport';
-import type { ObjDef, Scene } from '../construction/types';
+import type { ObjDef, ObjId, Scene } from '../construction/types';
 import type { Curve } from '../geometry/curves';
 import type { Vec } from '../geometry/vec';
 import { LEVELS, isBuiltInLevelId } from '../levels';
@@ -18,7 +19,7 @@ import { TopBar } from './TopBar';
 import './game.css';
 
 /** Text entry keeps its own keys; buttons do not count. */
-const isTextEntry = (t: EventTarget | null): boolean =>
+export const isTextEntry = (t: EventTarget | null): boolean =>
   t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
 
 /** Tools that arrive later and get a reveal the first time they appear in a session. */
@@ -105,14 +106,26 @@ const sessionOf = (store: Store) => {
   return s;
 };
 
+interface Props {
+  store: Store;
+  /**
+   * The editor's Solve sandbox: a panel shown beside the canvas (below it on phones) in
+   * place of the Hint button. Ignored unless the open level is a sandbox.
+   */
+  sidePanel?: ComponentChildren;
+  /** Sandbox only: objects that glow on the canvas (the editor's targets). */
+  marked?: ObjId[];
+}
+
 /**
  * The level screen: top bar, tool palette and canvas, plus the tool/history shortcuts.
  * Esc (gesture cancel) and Space+drag (pan) are handled by the Canvas itself.
  */
-export function GameScreen({ store }: { store: Store }) {
+export function GameScreen({ store, sidePanel, marked }: Props) {
   void store.revision.value; // re-render on every construction change
   const level = store.currentLevel.value;
   const custom = store.isCustom.value;
+  const sandbox = store.isSandbox.value;
   // Only built-in levels have tips and the tutorial coach; custom levels get neither.
   const builtInId = !custom && isBuiltInLevelId(level.id) ? level.id : null;
   const construction = store.construction();
@@ -260,25 +273,42 @@ export function GameScreen({ store }: { store: Store }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [store]);
 
+  // In the sandbox the editor's targets glow the way the tutorial marks its targets.
+  const glow = sandbox ? { ids: marked ?? [], spots: [] } : coachTargets;
+
   return (
-    <div class="game">
+    <div class={sandbox && sidePanel ? 'game has-side' : 'game'}>
       {/* Always mounted, so a tip that appears is announced (a fresh live region often is not). */}
       <div role="status" class="sr-only">
         {tip ?? ''}
       </div>
-      <TopBar
-        level={level}
-        moves={construction.moves()}
-        targets={level.targets}
-        onHint={onHint}
-        hintOpen={showHint}
-        hintDisabled={!!completion}
-        hintRef={hintBtn}
-        onMap={exit}
-        back={custom}
-        theme={store.progress.value.theme}
-        onTheme={store.setTheme}
-      />
+      {sandbox ? (
+        <TopBar
+          level={{
+            title: level.title || 'Untitled problem',
+            goalText: level.goalText || 'Each move you make becomes a solution step.',
+          }}
+          moves={construction.moves()}
+          onMap={exit}
+          back
+          backLabel="Back to Setup"
+          theme={store.progress.value.theme}
+        />
+      ) : (
+        <TopBar
+          level={level}
+          moves={construction.moves()}
+          targets={level.targets}
+          onHint={onHint}
+          hintOpen={showHint}
+          hintDisabled={!!completion}
+          hintRef={hintBtn}
+          onMap={exit}
+          back={custom}
+          theme={store.progress.value.theme}
+          onTheme={store.setTheme}
+        />
+      )}
       <ToolPalette
         tools={tools}
         active={store.tool.value}
@@ -295,7 +325,7 @@ export function GameScreen({ store }: { store: Store }) {
         onTipDismiss={() => setTip(null)}
       />
       <main class="game-canvas" ref={canvasHost} onPointerDown={() => setHintOpen(false)}>
-        <Canvas store={store} coach={coachTargets} onView={coachActive ? onView : undefined} />
+        <Canvas store={store} coach={glow} onView={coachActive ? onView : undefined} />
         {coachActive && (
           <CoachOverlay
             key={level.id}
@@ -308,6 +338,7 @@ export function GameScreen({ store }: { store: Store }) {
           />
         )}
       </main>
+      {sandbox && sidePanel && <div class="game-side">{sidePanel}</div>}
       {showHint && (
         <HintPanel
           hint={hint}

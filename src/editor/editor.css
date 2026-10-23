@@ -19,3 +19,767 @@
 .handle-dot {
   fill: var(--snap);
 }
+
+/* Pick mode (Delete): what would go is drawn in the warning colour. */
+
+.setup-canvas.is-picking {
+  cursor: pointer;
+}
+
+.setup-canvas.is-picking .is-hint .stroke {
+  stroke: var(--invalid);
+}
+
+.setup-canvas.is-picking .is-hint .dot {
+  fill: var(--invalid);
+}
+
+.setup-canvas.is-picking .hint-halo-stroke {
+  stroke: var(--invalid);
+}
+
+.setup-canvas.is-picking .hint-halo-dot {
+  fill: var(--invalid);
+}
+
+/* --- Editor shell ------------------------------------------------------------------------ */
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.editor-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.editor-body > * {
+  height: 100%;
+}
+
+/* Mode bar: Back, the segmented mode control, theme. */
+
+.modebar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--grid);
+  background: var(--surface);
+}
+
+.modebar-lead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.modebar-title {
+  display: none;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mode-tabs {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 3px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.mode-tab {
+  position: relative;
+  display: inline-flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.005em;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color var(--t-ui) var(--ease-out),
+    background-color var(--t-ui) var(--ease-out),
+    box-shadow var(--t-ui) var(--ease-out);
+}
+
+/* The 40 px pill sits in a 46 px track; the hit area covers the track's padding too. */
+.mode-tab::before {
+  content: '';
+  position: absolute;
+  inset: -3px 0;
+}
+
+.mode-tab:hover {
+  color: var(--ink);
+}
+
+.mode-tab[aria-selected='true'] {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 10%),
+    0 0 0 1px color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.mode-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mode-check {
+  display: inline-grid;
+  flex: none;
+  color: var(--snap);
+}
+
+.mode-check svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2.25;
+}
+
+.modebar-end {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.save-warn {
+  font-size: 12.5px;
+  line-height: 1.3;
+  color: var(--invalid);
+  white-space: nowrap;
+}
+
+.save-warn:empty {
+  display: none;
+}
+
+@media (max-width: 399px) {
+  .mode-tab {
+    font-size: 13.5px;
+  }
+
+  .save-warn {
+    position: absolute;
+    top: 52px;
+    right: 12px;
+    z-index: 3;
+  }
+}
+
+@media (min-width: 768px) {
+  .modebar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 12px;
+    min-height: 60px;
+    padding: 8px 12px 8px 8px;
+  }
+
+  .modebar-title {
+    display: block;
+  }
+
+  .mode-tabs {
+    width: 400px;
+  }
+
+  .modebar-end {
+    justify-self: end;
+  }
+}
+
+/* --- Setup ------------------------------------------------------------------------------- */
+
+.setup-screen {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'canvas'
+    'palette';
+  height: 100%;
+}
+
+.setup-stage {
+  grid-area: canvas;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+@media (min-width: 768px) {
+  .setup-screen {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: 'palette canvas';
+  }
+}
+
+/* Eight buttons share a phone's bottom bar. */
+@media (max-width: 767px) {
+  .setup-palette {
+    gap: 6px;
+    padding-inline: 8px;
+  }
+
+  .setup-palette .palette-group {
+    gap: 0;
+  }
+
+  .setup-palette .palette-history {
+    padding-left: 6px;
+  }
+
+  .setup-palette .tool-btn {
+    width: min(48px, calc((100vw - 34px) / 8));
+  }
+}
+
+.tool-delete[aria-pressed='true'],
+.tool-delete[aria-pressed='true']:hover {
+  color: var(--invalid);
+  background: color-mix(in srgb, var(--invalid) 13%, transparent);
+}
+
+/* Hide centre: an option chip attached to the Circle tool while it is active. */
+.tool-option {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px 0 10px;
+  border: 1px solid var(--grid);
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow:
+    0 6px 18px rgb(0 0 0 / 10%),
+    0 1px 2px rgb(0 0 0 / 6%);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  translate: -50% 0;
+  animation: tip-in var(--t-ui) var(--ease-out) both;
+  transition:
+    color var(--t-ui) var(--ease-out),
+    background-color var(--t-ui) var(--ease-out),
+    border-color var(--t-ui) var(--ease-out);
+}
+
+.tool-option svg {
+  width: 20px;
+  height: 20px;
+}
+
+.tool-option:hover {
+  color: var(--ink);
+}
+
+.tool-option[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--snap) 45%, transparent);
+  background: color-mix(in srgb, var(--snap) 12%, var(--surface));
+  color: var(--snap);
+}
+
+@media (min-width: 768px) {
+  .tool-option {
+    top: 50%;
+    bottom: auto;
+    left: calc(100% + 14px);
+    translate: 0 -50%;
+  }
+}
+
+/* Canvas overlays: the cue, Fit, and the delete prompt. */
+
+.stage-cue {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  max-width: calc(100% - 96px);
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.4;
+  text-align: center;
+  text-wrap: balance;
+  pointer-events: none;
+  translate: -50% 0;
+  animation: fade-in var(--t-ui) var(--ease-out) both;
+}
+
+.stage-cue.is-empty {
+  display: none;
+}
+
+.stage-fit {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: 1px solid var(--grid);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+}
+
+.delete-confirm {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 12px;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  padding: 10px 10px 10px 16px;
+  border: 1px solid color-mix(in srgb, var(--invalid) 40%, transparent);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow:
+    0 10px 28px rgb(0 0 0 / 14%),
+    0 1px 2px rgb(0 0 0 / 6%);
+  translate: -50% 0;
+  animation: tip-in var(--t-ui) var(--ease-out) both;
+}
+
+.delete-text {
+  flex: 1 1 200px;
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+
+.delete-text strong {
+  font-weight: 600;
+}
+
+.delete-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Quiet text button and the filled danger button (both 44 px tall). */
+
+.text-btn,
+.danger-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 550;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--t-ui) var(--ease-out),
+    color var(--t-ui) var(--ease-out);
+}
+
+.text-btn:hover {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.danger-btn {
+  background: var(--invalid);
+  color: var(--surface);
+}
+
+.danger-btn:hover {
+  background: color-mix(in srgb, var(--invalid) 88%, var(--ink));
+}
+
+/* --- Solve: targets glow gold, steady (the tutorial's ripple is not used here) ----------- */
+
+.editor[data-mode='solve'] .coach-halo-dot {
+  fill: var(--gold);
+  opacity: 0.32;
+}
+
+.editor[data-mode='solve'] .coach-halo-stroke {
+  stroke: var(--gold);
+  stroke-width: 12px;
+  opacity: 0.45;
+}
+
+.editor[data-mode='solve'] .coach-ring {
+  display: none;
+}
+
+/* Steps panel: a bottom sheet on phones, the right-hand column when wide. */
+
+.steps-panel {
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  border-top: 1px solid var(--grid);
+  background: var(--surface);
+}
+
+.steps-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 2px 6px 2px 16px;
+}
+
+.steps-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.steps-meta {
+  min-width: 0;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.steps-toggle {
+  margin-left: auto;
+}
+
+.steps-body {
+  max-height: min(28dvh, 240px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 8px 10px;
+}
+
+.steps-panel.is-collapsed .steps-body {
+  display: none;
+}
+
+.steps-empty,
+.steps-note {
+  margin: 2px 8px 10px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
+  text-wrap: pretty;
+}
+
+.steps-note svg {
+  width: 16px;
+  height: 16px;
+  margin: 0 1px -3px;
+  color: var(--gold);
+}
+
+.steps-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 10px;
+  padding: 6px 6px 10px 8px;
+  border-top: 1px solid var(--grid);
+}
+
+.step-row:first-child {
+  border-top-color: transparent;
+}
+
+.step-row.is-broken {
+  border-top-color: transparent;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--invalid) 8%, transparent);
+}
+
+.step-row.is-broken + .step-row {
+  border-top-color: transparent;
+}
+
+.step-num {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-top: 10px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.is-broken .step-num {
+  background: color-mix(in srgb, var(--invalid) 16%, transparent);
+  color: var(--invalid);
+}
+
+.step-main {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.step-objects {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step-obj {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-height: 44px;
+}
+
+.step-desc {
+  min-width: 0;
+  font-size: 14.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.is-broken .step-desc {
+  color: var(--muted);
+}
+
+.star-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin-right: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color var(--t-ui) var(--ease-out),
+    background-color var(--t-ui) var(--ease-out),
+    transform var(--t-ui) var(--ease-out);
+}
+
+.star-btn:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.star-btn[aria-pressed='true'],
+.star-btn[aria-pressed='true']:hover {
+  color: var(--gold);
+}
+
+.star-btn[aria-pressed='true'] svg {
+  animation: star-on 260ms var(--ease-out);
+}
+
+@keyframes star-on {
+  40% {
+    transform: scale(1.25);
+  }
+}
+
+.is-target .step-desc {
+  font-weight: 550;
+}
+
+.step-hint {
+  position: relative;
+}
+
+.step-hint-input {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 64px 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.3;
+  transition: border-color var(--t-ui) var(--ease-out);
+}
+
+.step-hint-input::placeholder {
+  color: var(--muted);
+  opacity: 0.75;
+}
+
+.step-hint-input:hover {
+  border-color: color-mix(in srgb, var(--ink) 24%, transparent);
+}
+
+.step-hint-input:focus-visible {
+  outline: 2px solid var(--snap);
+  outline-offset: 0;
+  border-color: transparent;
+}
+
+.step-count {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  translate: 0 -50%;
+}
+
+.step-broken {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.broken-flag {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--invalid);
+  color: var(--surface);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.broken-why {
+  flex: 0 1 auto;
+  font-size: 13px;
+  color: var(--invalid);
+}
+
+.broken-remove {
+  margin-left: auto;
+  color: var(--invalid);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (min-width: 768px) {
+  .steps-panel {
+    height: 100%;
+    max-height: none;
+    border-top: 0;
+    border-left: 1px solid var(--grid);
+  }
+
+  .steps-head {
+    min-height: 56px;
+    padding: 8px 16px 4px 20px;
+  }
+
+  .steps-toggle {
+    display: none;
+  }
+
+  .steps-body,
+  .steps-panel.is-collapsed .steps-body {
+    display: block;
+    flex: 1 1 auto;
+    max-height: none;
+    padding: 0 10px 16px;
+  }
+}
+
+/* Details / Test until their panels arrive. */
+
+.editor-placeholder {
+  display: grid;
+  place-content: center;
+  gap: 4px;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.editor-placeholder h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.editor-placeholder p {
+  margin: 0;
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-tab,
+  .star-btn,
+  .text-btn,
+  .danger-btn,
+  .tool-option {
+    transition-duration: 80ms;
+  }
+
+  .star-btn[aria-pressed='true'] svg {
+    animation: none;
+  }
+}
+
+/* Solve shows the title in the game bar below. */
+.editor[data-mode='solve'] .modebar-title {
+  display: none;
+}

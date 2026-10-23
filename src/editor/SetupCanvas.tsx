@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { evaluate } from '../construction/evaluate';
-import type { ObjSpec, Scene } from '../construction/types';
+import type { ObjId, ObjSpec, Scene } from '../construction/types';
 import { dist, sub, type Vec } from '../geometry/vec';
 import { frame } from '../levels/view';
 import { givenPoints } from '../problems/format';
@@ -58,10 +58,19 @@ interface Props {
   tool: SetupTool;
   /** Circles are placed without a visible centre point (a given-circle). */
   hideCentre: boolean;
+  /**
+   * Pick mode (Delete): a tap reports the given under it (or null) instead of editing, and
+   * drags do nothing. Absent: the tool edits as usual.
+   */
+  onPick?: ((id: ObjId | null) => void) | null;
+  /** Shown highlighted (the picked given and what depends on it). */
+  selected?: ObjId[];
+  /** Each change refits the view to the givens (a Fit control). */
+  fitKey?: number;
 }
 
 /** The Setup canvas: place and drag givens with the game's pointer flow, through the editor. */
-export function SetupCanvas({ editor, tool, hideCentre }: Props) {
+export function SetupCanvas({ editor, tool, hideCentre, onPick, selected, fitKey }: Props) {
   const model = editor.setup.value;
   const { scene, bounds } = useMemo(
     () => setupScene(model.givens, model.labels),
@@ -98,36 +107,51 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
     null,
   );
   const pinch = useRef<{ mid: Vec; d: number } | null>(null);
-  const live = useRef({ scene, tool, hideCentre, editor, dispatch });
-  live.current = { scene, tool, hideCentre, editor, dispatch };
+  const live = useRef({ scene, tool, hideCentre, editor, dispatch, onPick });
+  live.current = { scene, tool, hideCentre, editor, dispatch, onPick };
+  const picking = !!onPick;
 
   const local = (e: { clientX: number; clientY: number }): Vec => {
     const r = svgRef.current!.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
 
+  /** The hidden-circle handle under a screen point, if any. */
+  const handleAt = (pt: Vec, kind: InputKind): SetupTarget | null => {
+    const v = vpRef.current;
+    if (!v) return null;
+    let best: { h: SetupTarget; d: number } | null = null;
+    for (const o of live.current.scene.objects) {
+      if (o.def.type !== 'given-circle' || !o.value || !('r' in o.value)) continue;
+      const c = o.value;
+      for (const [which, pos] of [
+        ['centre', c.c],
+        ['rim', { x: c.c.x + c.r, y: c.c.y }],
+      ] as const) {
+        const d = dist(toScreen(v, pos), pt);
+        if (d <= SNAP_RADIUS[kind] && (!best || d < best.d))
+          best = { h: { kind: 'handle', id: o.id, which, pos }, d };
+      }
+    }
+    return best?.h ?? null;
+  };
+
   /** Hidden-circle handles first (point tool only), then points, then empty space. */
   const targetAt = (pt: Vec, kind: InputKind): SetupTarget | null => {
     const v = vpRef.current;
     if (!v) return null;
-    const { scene: s, tool: t } = live.current;
-    if (t === 'point') {
-      let best: { h: SetupTarget; d: number } | null = null;
-      for (const o of s.objects) {
-        if (o.def.type !== 'given-circle' || !o.value || !('r' in o.value)) continue;
-        const c = o.value;
-        for (const [which, pos] of [
-          ['centre', c.c],
-          ['rim', { x: c.c.x + c.r, y: c.c.y }],
-        ] as const) {
-          const d = dist(toScreen(v, pos), pt);
-          if (d <= SNAP_RADIUS[kind] && (!best || d < best.d))
-            best = { h: { kind: 'handle', id: o.id, which, pos }, d };
-        }
-      }
-      if (best) return best.h;
-    }
-    return findSnap(s, [], pt, v, kind, ['point', 'empty']);
+    const handle = live.current.tool === 'point' ? handleAt(pt, kind) : null;
+    return handle ?? findSnap(live.current.scene, [], pt, v, kind, ['point', 'empty']);
+  };
+
+  /** Pick mode: the given under a screen point — a handle's circle, a point, then a curve. */
+  const pickAt = (pt: Vec, kind: InputKind): ObjId | null => {
+    const v = vpRef.current;
+    if (!v) return null;
+    const h = handleAt(pt, kind);
+    if (h?.kind === 'handle') return h.id;
+    const t = findSnap(live.current.scene, [], pt, v, kind, ['point', 'curve']);
+    return t && (t.kind === 'point' || t.kind === 'curve') ? t.id : null;
   };
 
   function dispatch(ev: SetupEvent): void {
@@ -155,6 +179,20 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
     if (gesture.current.mode !== 'idle') live.current.dispatch({ type: 'tool', tool });
     setSnap(null);
   }, [tool]);
+
+  // Entering pick mode abandons an edit in progress.
+  useEffect(() => {
+    if (picking && gesture.current.mode !== 'idle') live.current.dispatch({ type: 'cancel' });
+    setSnap(null);
+  }, [picking]);
+
+  // The Fit control refits the view to the givens as they are now.
+  const firstFit = useRef(fitKey);
+  useEffect(() => {
+    if (fitKey === firstFit.current) return;
+    firstFit.current = fitKey;
+    setFitted((f) => ({ bounds, key: f.key + 1 }));
+  }, [fitKey]);
 
   // A gesture left open on unmount must not keep the editor's snapshot.
   useEffect(
@@ -215,10 +253,10 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
       primary.current = { id: e.pointerId, kind, start: pt, dragged: false };
       mode.current = 'gesture';
       setSnap(null);
-      dispatch(event('down', pt, kind));
+      if (!live.current.onPick) dispatch(event('down', pt, kind));
     } else if (pointers.current.size === 2) {
       // A second finger is never part of an edit: abandon it and pinch/pan instead.
-      if (mode.current === 'gesture') dispatch({ type: 'cancel' });
+      if (mode.current === 'gesture' && !live.current.onPick) dispatch({ type: 'cancel' });
       mode.current = 'pinch';
       pinch.current = pinchFrame();
       setLoupe(null);
@@ -231,7 +269,8 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
     const kind = inputKind(e);
     const last = pointers.current.get(e.pointerId);
     if (!last) {
-      if (kind !== 'touch' && mode.current === 'none') setSnap(targetAt(pt, kind));
+      if (kind !== 'touch' && mode.current === 'none')
+        setSnap(live.current.onPick ? null : targetAt(pt, kind));
       return;
     }
     pointers.current.set(e.pointerId, pt);
@@ -244,6 +283,7 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
     } else if (mode.current === 'gesture' && e.pointerId === primary.current?.id) {
       const p = primary.current;
       if (dist(pt, p.start) > TAP_SLOP_PX) p.dragged = true;
+      if (live.current.onPick) return;
       dispatch(event('move', pt, kind));
       setLoupe(kind === 'touch' && p.dragged && gesture.current.mode !== 'idle' ? pt : null);
     }
@@ -253,14 +293,18 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
     if (!pointers.current.has(e.pointerId)) return;
     const pt = local(e);
     pointers.current.delete(e.pointerId);
-    if (mode.current === 'gesture' && e.pointerId === primary.current?.id)
-      dispatch(event('up', pt, inputKind(e)));
+    const p = primary.current;
+    if (mode.current === 'gesture' && e.pointerId === p?.id) {
+      const pick = live.current.onPick;
+      if (!pick) dispatch(event('up', pt, inputKind(e)));
+      else if (!p.dragged) pick(pickAt(pt, inputKind(e)));
+    }
     release();
   };
 
   const onPointerCancel = (e: PointerEvent): void => {
     if (!pointers.current.delete(e.pointerId)) return;
-    if (mode.current === 'gesture' && e.pointerId === primary.current?.id)
+    if (mode.current === 'gesture' && e.pointerId === primary.current?.id && !live.current.onPick)
       dispatch({ type: 'cancel' });
     release();
   };
@@ -276,10 +320,21 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
       <svg
         ref={svgRef}
         data-testid="setup-canvas"
-        class="canvas setup-canvas"
+        class={picking ? 'canvas setup-canvas is-picking' : 'canvas setup-canvas'}
         role="application"
         aria-label="Setup canvas"
         tabindex={-1}
+        onKeyDown={(e) => {
+          // Pick mode: Enter or Space on a focused point picks it.
+          const pick = live.current.onPick;
+          if (!pick || (e.key !== 'Enter' && e.key !== ' ')) return;
+          const id = (e.target as Element)
+            .closest?.('[data-kind="point"]')
+            ?.getAttribute('data-id');
+          if (!id) return;
+          e.preventDefault();
+          pick(id);
+        }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -287,7 +342,7 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
         onLostPointerCapture={onPointerCancel}
         onPointerLeave={() => setSnap(null)}
         onDblClick={() => {
-          if (live.current.tool === 'point') return;
+          if (live.current.tool === 'point' || live.current.onPick) return;
           setFitted((f) => ({ bounds, key: f.key + 1 }));
         }}
         onContextMenu={(e) => e.preventDefault()}
@@ -322,6 +377,7 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
                 scene={scene}
                 view={vp}
                 candidates={[]}
+                hintIds={selected}
                 ghost={ghost}
                 snap={shownSnap && shownSnap.kind !== 'handle' ? shownSnap : null}
               />

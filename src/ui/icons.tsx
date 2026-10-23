@@ -118,3 +118,63 @@ export const BackIcon = () => (
     <path d="M19 12H5M11 6l-6 6 6 6" />
   </Icon>
 );
+
+export const SegmentIcon = () => (
+  <Icon>
+    <path d="M5 19 19 5" />
+    <circle cx="5" cy="19" r="1.75" fill="currentColor" />
+    <circle cx="19" cy="5" r="1.75" fill="currentColor" />
+  </Icon>
+);
+
+export const RayIcon = () => (
+  <Icon>
+    <path d="M5 19 20.5 3.5" />
+    <circle cx="5" cy="19" r="1.75" fill="currentColor" />
+    <path d="M14.5 4h6.5v6.5" />
+  </Icon>
+);
+
+/** A full line: runs off both edges, with two points on it. */
+export const FullLineIcon = () => (
+  <Icon>
+    <path d="M2 22 22 2" />
+    <circle cx="8" cy="16" r="1.5" fill="currentColor" />
+    <circle cx="16" cy="8" r="1.5" fill="currentColor" />
+  </Icon>
+);
+
+/** A circle without its centre (the Hide centre option). */
+export const HiddenCentreIcon = () => (
+  <Icon>
+    <circle cx="12" cy="12" r="8" />
+    <path d="M10 10l4 4M14 10l-4 4" />
+  </Icon>
+);
+
+export const TrashIcon = () => (
+  <Icon>
+    <path d="M4.5 7h15M10 4h4M6.5 7l.9 12.1a1 1 0 0 0 1 .9h7.2a1 1 0 0 0 1-.9L17.5 7" />
+    <path d="M10 11v5M14 11v5" />
+  </Icon>
+);
+
+export const FitIcon = () => (
+  <Icon>
+    <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+    <circle cx="12" cy="12" r="2.5" />
+  </Icon>
+);
+
+export const CheckIcon = () => (
+  <Icon>
+    <path d="m5 12.5 4.5 4.5L19 7.5" />
+  </Icon>
+);
+
+/** Outline star; `filled` fills it (a marked target). */
+export const StarIcon = ({ filled }: { filled?: boolean }) => (
+  <Icon>
+    <path d={STAR_PATH} fill={filled ? 'currentColor' : 'none'} />
+  </Icon>
+);

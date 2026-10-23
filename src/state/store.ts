@@ -33,6 +33,8 @@ export function createStore(storage: Storage | null) {
   /** Options of the open custom level; null while a built-in level is open. */
   const custom = signal<CustomLevelOpts | null>(null);
   const isCustom = computed(() => custom.value !== null);
+  /** The open custom level is the editor's Solve sandbox (no completion, no hints). */
+  const isSandbox = computed(() => !!custom.value?.sandbox);
   const tool = signal<ToolId>('point');
   const revision = signal(0);
   const hintTier = signal<Tier>(0);
@@ -144,6 +146,7 @@ export function createStore(storage: Storage | null) {
     currentLevel: currentLevel as ReadonlySignal<Level>,
     levelId,
     isCustom,
+    isSandbox,
     tool,
     revision,
     hintTier,

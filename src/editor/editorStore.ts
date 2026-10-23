@@ -663,6 +663,8 @@ export function createEditor(
 
   return {
     localId,
+    /** The game store this editor drives (Solve and Test play in it). */
+    game,
     mode: mode as Signal<EditorMode>,
     setup: setup as Signal<SetupModel>,
     solution: solution as Signal<ProblemStep[]>,

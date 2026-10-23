@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
-import type { Level, LevelId } from '../levels/types';
+import type { BuiltInLevel, LevelId } from '../levels/types';
 import type { Progress } from '../state/persistence';
 import { STAR_PATH } from './icons';
 import './screens.css';
 
 interface Props {
-  levels: Level[];
+  levels: BuiltInLevel[];
   progress: Progress;
   isUnlocked: (id: LevelId) => boolean;
   /** The level Continue would open; its node is subtly emphasised and the inked arc ends there. */

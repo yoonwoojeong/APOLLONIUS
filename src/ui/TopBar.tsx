@@ -42,11 +42,15 @@ export function TopBar(props: Props) {
         <MapIcon />
       </button>
       <h1 class="topbar-title">
-        <span class="level-num">
-          <span class="sr-only">Level </span>
-          {level.number}
-        </span>
-        <span class="sr-only">: </span>
+        {level.number !== undefined && (
+          <>
+            <span class="level-num">
+              <span class="sr-only">Level </span>
+              {level.number}
+            </span>
+            <span class="sr-only">: </span>
+          </>
+        )}
         {level.title}
       </h1>
       <p class="topbar-goal" title={level.goalText}>

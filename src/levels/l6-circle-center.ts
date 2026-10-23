@@ -1,14 +1,14 @@
 import { FALLBACK } from './explain';
 import { bisectedPairs } from '../reasoning/facts';
 import { findPointAt, isCurve } from './goals';
-import type { Level } from './types';
+import type { BuiltInLevel } from './types';
 import { frame } from './view';
 
 const C = { x: 0.2, y: -0.1 };
 const R = 1.4;
 const CHORD_NUDGE = "Any chord's perpendicular bisector passes through the centre.";
 
-export const circleCenter: Level = {
+export const circleCenter: BuiltInLevel = {
   id: 'circle-center',
   number: 6,
   title: 'Circle Center',

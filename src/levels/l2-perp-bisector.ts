@@ -2,7 +2,7 @@ import { FALLBACK } from './explain';
 import { isEquidistant, labelOf } from '../reasoning/facts';
 import { perpBisector } from '../geometry/curves';
 import { findCurveEq, pos } from './goals';
-import type { Level, ReferenceStep } from './types';
+import type { BuiltInLevel, ReferenceStep } from './types';
 import { frame } from './view';
 
 const A = { x: -1, y: 0 };
@@ -31,7 +31,7 @@ export const bisectorSteps: ReferenceStep[] = [
   },
 ];
 
-export const perpBisectorLevel: Level = {
+export const perpBisectorLevel: BuiltInLevel = {
   id: 'perp-bisector',
   number: 2,
   title: 'Perpendicular Bisector',

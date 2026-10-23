@@ -4,7 +4,7 @@ import type { Scene } from '../construction/types';
 import { add, dist, perp, scale, sub, type Vec } from '../geometry/vec';
 import { eqPoint } from '../geometry/curves';
 import { findCurveEq, findLine, findPointAt, isPoint, pos } from './goals';
-import type { GoalMatch, Level } from './types';
+import type { BuiltInLevel, GoalMatch } from './types';
 import { frame } from './view';
 
 const A = { x: -1, y: 0 };
@@ -41,7 +41,7 @@ function goal(s: Scene): GoalMatch | null {
   return null;
 }
 
-export const equilateral: Level = {
+export const equilateral: BuiltInLevel = {
   id: 'equilateral',
   number: 1,
   title: 'Equilateral Triangle',

@@ -1,0 +1,37 @@
+{
+  "format": "apollonius-problem",
+  "version": 1,
+  "title": "Perpendicular Bisector",
+  "goalText": "Construct the perpendicular bisector of AB.",
+  "explain": "Both crossings are equidistant from A and B, so the line through them is the perpendicular bisector.",
+  "author": "ada",
+  "tools": ["point", "line", "circle"],
+  "givens": [
+    { "id": "A", "def": { "type": "given-point", "pos": { "x": -1, "y": 0 } } },
+    { "id": "B", "def": { "type": "given-point", "pos": { "x": 1, "y": 0 } } }
+  ],
+  "labels": { "A": "A", "B": "B" },
+  "solution": [
+    {
+      "objects": [{ "id": "r1", "def": { "type": "circle", "center": "A", "through": "B" } }],
+      "nudge": "Which points are the same distance from A and from B?"
+    },
+    {
+      "objects": [{ "id": "r2", "def": { "type": "circle", "center": "B", "through": "A" } }],
+      "nudge": "Which points are the same distance from A and from B?"
+    },
+    {
+      "objects": [
+        { "id": "r3", "def": { "type": "intersection", "a": "r1", "b": "r2", "index": 0 } },
+        { "id": "r4", "def": { "type": "intersection", "a": "r1", "b": "r2", "index": 1 } }
+      ],
+      "nudge": "Mark where the circles cross."
+    },
+    {
+      "objects": [{ "id": "r5", "def": { "type": "line", "a": "r3", "b": "r4" } }],
+      "nudge": "Every point on one line is equidistant from A and from B."
+    }
+  ],
+  "targets": ["r5"],
+  "par": { "L": 3, "E": 3 }
+}

@@ -2,7 +2,9 @@ import { describe, expect, test } from 'vitest';
 import { Construction } from '../../../src/construction/construction';
 import type { ObjSpec } from '../../../src/construction/types';
 import { LEVELS, levelById } from '../../../src/levels';
-import { pos } from '../../../src/levels/goals';
+import { isCurve, pos } from '../../../src/levels/goals';
+import { fit, toScreen } from '../../../src/canvas/viewport';
+import type { Vec } from '../../../src/geometry/vec';
 import { playReference } from '../helpers';
 
 const fresh = (id: Parameters<typeof levelById>[0]) => {
@@ -26,6 +28,32 @@ describe('levels', () => {
 
   test.each(LEVELS)('$id: reference matches L/E targets exactly', (lvl) => {
     expect(playReference(lvl).moves()).toEqual(lvl.targets);
+  });
+
+  // Phone canvas: 390 px wide, conservatively 600 px tall; 24 px padding as in useViewport.
+  test.each(LEVELS)('$id: reference crossings are >= 40 px from other points on a phone', (lvl) => {
+    const vp = fit(lvl.view, 390, 600, 24);
+    const c = new Construction(lvl.givens, lvl.labels, lvl.sceneDiameter);
+    const points = (): Map<string, Vec> =>
+      new Map(
+        c
+          .scene()
+          .objects.filter((o) => o.value && !isCurve(o.value))
+          .map((o) => [o.id, o.value as Vec]),
+      );
+    for (const step of lvl.reference) {
+      const before = points();
+      add(c, step.objects);
+      const after = points();
+      for (const o of step.objects) {
+        if (o.def.type !== 'intersection') continue;
+        const p = toScreen(vp, after.get(o.id) as Vec);
+        for (const [id, q] of before) {
+          const d = Math.hypot(p.x - toScreen(vp, q).x, p.y - toScreen(vp, q).y);
+          expect(d, `${o.id} vs ${id}`).toBeGreaterThanOrEqual(40);
+        }
+      }
+    }
   });
 
   test.each(LEVELS)('$id: givens alone do not satisfy the goal', (lvl) => {

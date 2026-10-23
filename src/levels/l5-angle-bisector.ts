@@ -8,7 +8,7 @@ import { frame } from './view';
 
 const V = { x: -1.5, y: 0 };
 const A = { x: 1.5, y: 1.2 };
-const B = { x: 1.5, y: -0.9 };
+const B = { x: 0.6, y: -0.8 };
 
 export const angleBisector: Level = {
   id: 'angle-bisector',

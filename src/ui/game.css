@@ -1,0 +1,253 @@
+/* Game screen: top bar, tool palette and canvas. Colours come from tokens only. */
+
+.game {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'top'
+    'canvas'
+    'palette';
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.game-canvas {
+  grid-area: canvas;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Shared quiet icon button (top bar, theme toggle). */
+
+.icon-btn,
+.theme-toggle,
+.tool-btn {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color var(--t-ui) var(--ease-out),
+    background-color var(--t-ui) var(--ease-out),
+    opacity var(--t-ui) var(--ease-out);
+}
+
+.icon-btn:hover,
+.theme-toggle:hover,
+.tool-btn:hover:not(:disabled) {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+/* Top bar */
+
+.topbar {
+  grid-area: top;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'map title actions'
+    'goal goal counter';
+  align-items: center;
+  column-gap: 8px;
+  padding: 6px 12px 10px 8px;
+  border-bottom: 1px solid var(--grid);
+  background: var(--surface);
+}
+
+.topbar-map {
+  grid-area: map;
+}
+
+.topbar-title {
+  grid-area: title;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.level-num {
+  font-size: 15px;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--muted);
+  font-variant-numeric: oldstyle-nums;
+}
+
+.topbar-goal {
+  grid-area: goal;
+  min-width: 0;
+  margin: 0;
+  padding-left: 8px;
+  font-size: 14px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.counter {
+  grid-area: counter;
+  margin: 0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+  white-space: nowrap;
+  justify-self: end;
+}
+
+.counter .over {
+  color: var(--muted);
+}
+
+.topbar-actions {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Tool palette: bottom bar on narrow screens. */
+
+.palette {
+  grid-area: palette;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--grid);
+  background: var(--surface);
+}
+
+.palette-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.palette-history {
+  padding-left: 12px;
+  border-left: 1px solid var(--grid);
+}
+
+.tool-btn {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+}
+
+.tool-btn[aria-pressed='true'],
+.tool-btn[aria-pressed='true']:hover {
+  color: var(--snap);
+  background: color-mix(in srgb, var(--snap) 13%, transparent);
+}
+
+.tool-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.key-hint {
+  display: none;
+  position: absolute;
+  right: 5px;
+  bottom: 3px;
+  font-size: 10px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.tool-btn[aria-pressed='true'] .key-hint {
+  color: inherit;
+}
+
+/* Wide screens: single-row top bar, palette as a left rail. */
+
+@media (min-width: 768px) {
+  .game {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      'top top'
+      'palette canvas';
+  }
+
+  .topbar {
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas: 'map title goal counter actions';
+    column-gap: 12px;
+    min-height: 60px;
+    padding: 8px 12px 8px 16px;
+  }
+
+  .topbar-title {
+    font-size: 20px;
+  }
+
+  .topbar-goal {
+    padding-left: 16px;
+    border-left: 1px solid var(--grid);
+    line-height: 1.6;
+  }
+
+  .counter {
+    padding-right: 8px;
+  }
+
+  .palette {
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 16px 12px;
+    border-top: 0;
+    border-right: 1px solid var(--grid);
+  }
+
+  .palette-group {
+    flex-direction: column;
+  }
+
+  .palette-history {
+    margin-top: auto;
+    padding: 12px 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--grid);
+  }
+
+  .key-hint {
+    display: block;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn,
+  .theme-toggle,
+  .tool-btn {
+    transition-duration: 80ms;
+  }
+}

@@ -88,6 +88,19 @@
   animation: screen-in var(--t-ui) var(--ease-out) 340ms both;
 }
 
+/* The secondary entry to My problems: quieter than Begin, but a full 44 px target. */
+.btn.title-create {
+  min-width: 184px;
+  margin-top: 10px;
+  border-color: transparent;
+  color: var(--muted);
+  animation: screen-in var(--t-ui) var(--ease-out) 400ms both;
+}
+
+.btn.title-create:hover {
+  color: var(--ink);
+}
+
 @keyframes screen-in {
   from {
     opacity: 0;
@@ -106,7 +119,28 @@
 }
 
 .map-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'title create'
+    'summary summary';
+  align-items: center;
+  column-gap: 12px;
   padding: 4px 56px 0 8px;
+}
+
+.map-head .map-title {
+  grid-area: title;
+}
+
+.map-head .map-summary {
+  grid-area: summary;
+}
+
+.btn.map-create {
+  grid-area: create;
+  padding: 0 14px 0 12px;
+  background: var(--surface);
 }
 
 .map-title {
@@ -308,6 +342,9 @@
   }
 
   .map-head {
+    grid-template-areas:
+      'title create'
+      'summary create';
     padding-left: 4px;
   }
 
@@ -390,6 +427,7 @@
   .title-word,
   .title-sub,
   .btn.title-start,
+  .btn.title-create,
   .map-item {
     animation: ui-fade-in 80ms linear both;
   }

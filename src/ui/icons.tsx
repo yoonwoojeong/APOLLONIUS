@@ -178,3 +178,46 @@ export const StarIcon = ({ filled }: { filled?: boolean }) => (
     <path d={STAR_PATH} fill={filled ? 'currentColor' : 'none'} />
   </Icon>
 );
+
+/** Two overlapping sheets (Duplicate). */
+export const CopyIcon = () => (
+  <Icon>
+    <rect x="8.5" y="8.5" width="11" height="11" rx="2" />
+    <path d="M15.5 5.5v-.5a1.5 1.5 0 0 0-1.5-1.5H6A1.5 1.5 0 0 0 4.5 5v8A1.5 1.5 0 0 0 6 14.5h.5" />
+  </Icon>
+);
+
+/** Down into a tray (Export a file). */
+export const DownloadIcon = () => (
+  <Icon>
+    <path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14" />
+  </Icon>
+);
+
+/** Up out of a tray (Import a file). */
+export const UploadIcon = () => (
+  <Icon>
+    <path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 19.5h14" />
+  </Icon>
+);
+
+export const PlusIcon = () => (
+  <Icon>
+    <path d="M12 5v14M5 12h14" />
+  </Icon>
+);
+
+/** A compass point with an arc: the Create entry. */
+export const CreateIcon = () => (
+  <Icon>
+    <circle cx="8" cy="15" r="1.75" fill="currentColor" />
+    <path d="M8 15 15.5 7.5" />
+    <path d="M19 12.5a7.5 7.5 0 0 0-6.5-7.4" />
+  </Icon>
+);
+
+export const PlayIcon = () => (
+  <Icon>
+    <path d="M8 5.5v13l10.5-6.5z" />
+  </Icon>
+);

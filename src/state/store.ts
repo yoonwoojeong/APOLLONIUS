@@ -222,6 +222,10 @@ export function createStore(storage: Storage | null) {
     goToMap(): void {
       screen.value = 'map';
     },
+    /** My problems: the author's local drafts. */
+    goToProblems(): void {
+      screen.value = 'problems';
+    },
     setTheme(theme: 'light' | 'dark'): void {
       progress.value = { ...progress.value, theme };
       persist();

@@ -8,7 +8,8 @@ import { safeStorage } from './state/persistence';
 import { createStore } from './state/store';
 import { App } from './ui/App';
 
-const store = createStore(safeStorage());
+const storage = safeStorage();
+const store = createStore(storage);
 
 effect(() => {
   const theme = store.progress.value.theme;
@@ -16,4 +17,4 @@ effect(() => {
   else delete document.documentElement.dataset.theme;
 });
 
-render(<App store={store} />, document.getElementById('app')!);
+render(<App store={store} storage={storage} />, document.getElementById('app')!);

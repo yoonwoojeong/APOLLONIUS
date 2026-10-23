@@ -456,6 +456,14 @@ describe('My problems: import', () => {
     expect(host.querySelector('[role="dialog"]')!.textContent).toContain("isn't valid JSON");
   });
 
+  it("the file's name is shown cut short with hidden characters spelled out", async () => {
+    const { host } = mount(memoryStorage());
+    const name = `inv\u202eoice${'x'.repeat(200)}.json`;
+    await pick(host, { ...textFile('hello'), name } as never);
+    const file = host.querySelector('[role="dialog"] .pb-file')!.textContent!;
+    expect(file).toBe(`inv\\u202Eoice${'x'.repeat(16)}…`);
+  });
+
   it('an invalid problem lists its errors and imports nothing; Esc closes', async () => {
     const storage = memoryStorage();
     const { host } = mount(storage);

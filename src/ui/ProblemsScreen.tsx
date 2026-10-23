@@ -13,7 +13,7 @@ import {
   saveHasFailed,
   withUnsaved,
 } from '../problems/unsaved';
-import { validate } from '../problems/validate';
+import { echo, validate } from '../problems/validate';
 import { mergeStars, type Stars } from '../reasoning/stars';
 import type { Store } from '../state/store';
 import {
@@ -300,7 +300,8 @@ export function ProblemsScreen({ store, storage }: Props) {
         const k = `${x.path}\u0000${x.message}`;
         return !seen.has(k) && !!seen.add(k);
       });
-      setImportError({ file: (file as Partial<File>).name ?? 'this file', errors });
+      const name = (file as Partial<File>).name;
+      setImportError({ file: name === undefined ? 'this file' : echo(name), errors });
       return;
     }
     const d: Draft = { ...newDraft(Date.now(), Math.random), problem: r.problem };

@@ -521,3 +521,64 @@ describe('validate: fix round 1', () => {
     expect(codes(validate({ ...valid(), title }))).toEqual(['text']);
   });
 });
+
+describe('validate: untrusted strings in messages', () => {
+  const long = 'x'.repeat(5000);
+  const all = (r: Result): string =>
+    errors(r)
+      .map((e) => `${e.path} ${e.message}`)
+      .join('\n');
+
+  test('an unknown field name, object type, id, reference, target and tool are cut short', () => {
+    const p = valid() as unknown as Record<string, unknown> & Problem;
+    p[long] = 1;
+    expect(all(validate(p))).not.toContain('x'.repeat(25));
+    expect(all(validate(p))).toContain(`${'x'.repeat(24)}…`);
+
+    const q = valid();
+    (q.givens[0]!.def as unknown as Record<string, unknown>).type = long;
+    expect(all(validate(q))).toContain(`"${'x'.repeat(24)}…"`);
+
+    const r = valid();
+    (r.givens[0]!.def as unknown as Record<string, unknown>)[long] = 1;
+    expect(all(validate(r))).not.toContain('x'.repeat(25));
+
+    const s = valid();
+    s.givens[0]!.id = long;
+    s.labels = {};
+    s.targets = [long];
+    s.tools = [...s.tools, long as never];
+    const sol = s.solution[0]!.objects[0]!.def as unknown as Record<string, unknown>;
+    sol.center = `${long}!`;
+    const text = all(validate(s));
+    expect(text).not.toContain('x'.repeat(25));
+    expect(text).toContain('\u2026');
+  });
+
+  test('hidden and direction-changing characters in echoes are spelled out', () => {
+    const p = valid();
+    p.targets = ['ev\u202eil\u0000'];
+    const text = all(validate(p));
+    expect(text).toContain('ev\\u202Eil\\u0000');
+    expect(text).not.toContain('\u202e');
+    expect(text).not.toContain('\u0000');
+  });
+
+  test('more invisible characters are refused in text', () => {
+    for (const ch of [
+      '\u200e',
+      '\u200f',
+      '\u061c',
+      '\u2060',
+      '\u2064',
+      '\u00ad',
+      '\u180e',
+      '\u{e0001}',
+      '\u{e007f}',
+    ]) {
+      const p = valid();
+      p.title = `Bi${ch}sector`;
+      expect(codes(validate(p)), JSON.stringify(ch)).toContain('text');
+    }
+  });
+});

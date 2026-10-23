@@ -44,8 +44,36 @@ const FREE_TURN = 0.05;
 const ID_RE = /^[A-Za-z0-9_-]+$/;
 // eslint-disable-next-line no-control-regex
 const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f]/;
-/** Invisible or direction-changing characters: bidi overrides/isolates, line/paragraph separators, zero-width. */
-const INVISIBLE_RE = /[\u200b-\u200d\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]/;
+/**
+ * Invisible or direction-changing characters: soft hyphen, Arabic letter mark, Mongolian vowel
+ * separator, zero-width characters and direction marks, line/paragraph separators, bidi
+ * embeddings/overrides/isolates, word joiner and invisible operators, BOM and tag characters.
+ */
+const INVISIBLE_RE =
+  /[\u00ad\u061c\u180e\u200b-\u200f\u2028-\u202e\u2060-\u2064\u2066-\u2069\ufeff\u{e0000}-\u{e007f}]/u;
+/** Untrusted text echoed in a message or path is cut to this many characters. */
+const ECHO_MAX = 24;
+
+/**
+ * An untrusted value as a message or path shows it: at most 24 characters (then "…"), with
+ * control, invisible and direction-changing characters spelled out as `\uXXXX`.
+ */
+export function echo(v: unknown): string {
+  const s = String(v);
+  // Only the head is looked at, so a huge string is never spread.
+  const chars = [...s.slice(0, ECHO_MAX * 2 + 2)];
+  const cut = chars.length > ECHO_MAX;
+  return (
+    chars
+      .slice(0, ECHO_MAX)
+      .map((ch) =>
+        CONTROL_RE.test(ch) || INVISIBLE_RE.test(ch)
+          ? `\\u${ch.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`
+          : ch,
+      )
+      .join('') + (cut ? '…' : '')
+  );
+}
 const TOOLS: readonly ToolId[] = ['point', 'line', 'circle', 'perp-bisector'];
 const REQUIRED_TOOLS: readonly ToolId[] = ['point', 'line', 'circle'];
 
@@ -122,7 +150,9 @@ const allSpecs = (p: Problem): ObjSpec[] => [...p.givens, ...p.solution.flatMap(
 
 /** "Step 3" for solution objects, "Given A" for givens. */
 function where(p: Problem, l: Located): string {
-  return l.step === null ? `Given ${labelOf(p, l.spec.id) ?? l.spec.id}` : `Step ${l.step + 1}`;
+  return l.step === null
+    ? `Given ${echo(labelOf(p, l.spec.id) ?? l.spec.id)}`
+    : `Step ${l.step + 1}`;
 }
 
 // ---------------------------------------------------------------- 1. shape
@@ -138,7 +168,7 @@ function checkShape(input: unknown): ValidationError[] {
   }
   for (const k of Object.keys(input)) {
     if (!TOP_REQUIRED.includes(k) && !TOP_OPTIONAL.includes(k)) {
-      err(k, `Unknown field "${k}" — remove it.`);
+      err(echo(k), `Unknown field "${echo(k)}" — remove it.`);
     }
   }
   for (const k of TOP_REQUIRED) {
@@ -207,12 +237,12 @@ function checkShape(input: unknown): ValidationError[] {
         ? DEF_FIELDS[def.type as ObjDef['type']]
         : undefined;
     if (!fields) {
-      err(`${path}.def.type`, `${name}: unknown object type "${String(def.type)}".`);
+      err(`${path}.def.type`, `${name}: unknown object type "${echo(def.type)}".`);
       return;
     }
     for (const k of Object.keys(def)) {
       if (k !== 'type' && !own(fields, k))
-        err(`${path}.def.${k}`, `${name}: unknown field "${k}".`);
+        err(`${path}.def.${echo(k)}`, `${name}: unknown field "${echo(k)}".`);
     }
     for (const [k, kind] of Object.entries(fields)) {
       const fv = own(def, k) ? def[k] : undefined;
@@ -343,7 +373,7 @@ function checkLimits(p: Problem): ValidationError[] {
     text(`solution[${i}].nudge`, `Step ${i + 1}: the hint`, s.nudge, 0, LIMITS.nudgeMax),
   );
   for (const [id, label] of Object.entries(p.labels)) {
-    text(`labels.${id}`, `The label of ${id}`, label, LIMITS.labelMin, LIMITS.labelMax);
+    text(`labels.${echo(id)}`, `The label of ${echo(id)}`, label, LIMITS.labelMin, LIMITS.labelMax);
   }
 
   const max = LIMITS.coordMax;
@@ -386,12 +416,12 @@ function checkReferences(p: Problem): ValidationError[] {
       err(
         'id',
         `${l.path}.id`,
-        `${name}: the id "${id}" must be 1–${LIMITS.idMax} letters, digits, "_" or "-".`,
+        `${name}: the id "${echo(id)}" must be 1–${LIMITS.idMax} letters, digits, "_" or "-".`,
       );
     } else if (id in Object.prototype) {
-      err('id', `${l.path}.id`, `${name}: "${id}" is a reserved word — pick another id.`);
+      err('id', `${l.path}.id`, `${name}: "${echo(id)}" is a reserved word — pick another id.`);
     } else if (defined.has(id)) {
-      err('id', `${l.path}.id`, `${name}: the id "${id}" is used twice.`);
+      err('id', `${l.path}.id`, `${name}: the id "${echo(id)}" is used twice.`);
     }
     const allowed = l.step === null ? GIVEN_TYPES : SOLUTION_TYPES;
     if (!allowed.includes(def.type)) {
@@ -411,11 +441,11 @@ function checkReferences(p: Problem): ValidationError[] {
       const target = defined.get(ref);
       const fp = `${l.path}.def.${k}`;
       if (!target) {
-        err('reference', fp, `${name}: it uses "${ref}", which isn't defined before it.`);
+        err('reference', fp, `${name}: it uses "${echo(ref)}", which isn't defined before it.`);
         continue;
       }
       const isPt = POINT_TYPES.includes(target.spec.def.type);
-      const refName = labelOf(p, ref) ?? ref;
+      const refName = echo(labelOf(p, ref) ?? ref);
       if (l.step === null) {
         if (target.spec.def.type !== 'given-point') {
           err('type', fp, `${name}: it must be built from given points, but ${refName} isn't one.`);
@@ -433,13 +463,13 @@ function checkReferences(p: Problem): ValidationError[] {
   p.targets.forEach((id, i) => {
     const path = `targets[${i}]`;
     const l = defined.get(id);
-    if (seen.has(id)) err('reference', path, `Target ${id} is listed twice.`);
-    else if (!l) err('reference', path, `Target "${id}" isn't an object in the solution.`);
+    if (seen.has(id)) err('reference', path, `Target ${echo(id)} is listed twice.`);
+    else if (!l) err('reference', path, `Target "${echo(id)}" isn't an object in the solution.`);
     else if (l.step === null) {
       err(
         'target-given',
         path,
-        `Target ${labelOf(p, id) ?? id} is a given — the player would have nothing to construct.`,
+        `Target ${echo(labelOf(p, id) ?? id)} is a given — the player would have nothing to construct.`,
       );
     }
     seen.add(id);
@@ -447,7 +477,11 @@ function checkReferences(p: Problem): ValidationError[] {
 
   for (const id of Object.keys(p.labels)) {
     if (defined.get(id)?.step !== null) {
-      err('reference', `labels.${id}`, `There is a label for "${id}", which isn't a given.`);
+      err(
+        'reference',
+        `labels.${echo(id)}`,
+        `There is a label for "${echo(id)}", which isn't a given.`,
+      );
     }
   }
   return errs;
@@ -462,7 +496,7 @@ function checkTools(p: Problem): ValidationError[] {
   };
   const seen = new Set<string>();
   p.tools.forEach((t, i) => {
-    if (!TOOLS.includes(t)) err(`tools[${i}]`, `Unknown tool "${t}".`);
+    if (!TOOLS.includes(t)) err(`tools[${i}]`, `Unknown tool "${echo(t)}".`);
     else if (seen.has(t)) err(`tools[${i}]`, `The tool "${t}" is listed twice.`);
     seen.add(t);
   });

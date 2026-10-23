@@ -8,7 +8,13 @@ export const TAP_SLOP_PX = 6;
 export type GestureState =
   | { mode: 'idle' }
   | { mode: 'dragging'; from: SnapTarget; current: SnapTarget | null; startScreen: Vec }
-  | { mode: 'armed'; from: SnapTarget; current: SnapTarget | null };
+  | {
+      mode: 'armed';
+      from: SnapTarget;
+      current: SnapTarget | null;
+      /** The pointer-down in progress while armed; absent between gestures. */
+      down?: { target: SnapTarget | null; startScreen: Vec };
+    };
 
 export type GestureEvent =
   | { type: 'down'; target: SnapTarget | null; screen: Vec }
@@ -124,19 +130,35 @@ export function gestureReducer(state: GestureState, ev: GestureEvent, ctx: Ctx):
       if (ev.type !== 'up') return { state, effects: [] };
       const tap = dist(ev.screen, state.startScreen) <= TAP_SLOP_PX;
       if (!twoPoint) return idle(tap ? pointToolCommit(ev.target, ctx) : []);
-      const from = state.from as Endpoint;
+      const from = state.from;
+      if (!isEndpoint(from)) return idle();
+      if (tap) return arm(from, ctx);
       if (isEndpoint(ev.target) && !sameEndpoint(ev.target, from)) {
         return idle([commitTwoPoint(from, ev.target, ctx)]);
       }
-      if (tap) return arm(from, ctx);
       if (isEndpoint(ev.target)) return idle([{ type: 'invalid' }]);
       return idle();
     }
     case 'armed': {
       if (ev.type === 'move') return hover(state, ev.target);
-      if (ev.type !== 'up' || !isEndpoint(ev.target)) return { state, effects: [] };
-      if (sameEndpoint(ev.target, state.from)) return idle([{ type: 'invalid' }]);
-      return idle([commitTwoPoint(state.from as Endpoint, ev.target, ctx)]);
+      if (ev.type === 'down') {
+        return { state: { ...state, down: { target: ev.target, startScreen: ev.screen } }, effects: [] };
+      }
+      const { down, ...rest } = state;
+      const stay: Result = { state: rest, effects: [] };
+      const from = state.from;
+      if (!down || !isEndpoint(down.target) || !isEndpoint(from) || !isEndpoint(ev.target)) return stay;
+      const tap = dist(ev.screen, down.startScreen) <= TAP_SLOP_PX;
+      if (tap) {
+        if (!sameEndpoint(ev.target, down.target)) return stay;
+        return idle([sameEndpoint(down.target, from) ? { type: 'invalid' } : commitTwoPoint(from, down.target, ctx)]);
+      }
+      if (sameEndpoint(down.target, from)) {
+        if (sameEndpoint(ev.target, from)) return idle([{ type: 'invalid' }]);
+        return idle([commitTwoPoint(from, ev.target, ctx)]);
+      }
+      if (sameEndpoint(ev.target, down.target)) return stay;
+      return idle([commitTwoPoint(down.target, ev.target, ctx)]);
     }
   }
 }

@@ -200,4 +200,44 @@ describe('gestureReducer', () => {
     const r = run('line', [{ type: 'tool', tool: 'circle' }], { mode: 'armed', from: A, current: null });
     expect(r).toEqual({ state: { mode: 'idle' }, effects: [] });
   });
+
+  describe('armed pointer sequences', () => {
+    const C = pt('C', 0, 50);
+    const armed: GestureState = { mode: 'armed', from: A, current: null };
+    const E: SnapTarget = { kind: 'empty', pos: { x: 1, y: 1 } };
+
+    it('down on empty, drag, up on B stays armed with no commit', () => {
+      const r = run('line', [down(E, 30, 30), move(B, 80, 0), up(B, 80, 0)], armed);
+      expect(r.state).toMatchObject({ mode: 'armed', from: A });
+      expect(r.effects.filter((e) => e.type === 'commit')).toEqual([]);
+    });
+
+    it('down on C, drag, up on B commits C-B', () => {
+      const r = run('line', [down(C, 0, 50), up(B, 90, 0)], armed);
+      expect(r.state).toEqual({ mode: 'idle' });
+      expect(r.effects).toEqual([
+        { type: 'commit', command: { type: 'add', objects: [{ id: 'n1', def: { type: 'line', a: 'C', b: 'B' } }] } },
+      ]);
+    });
+
+    it('tap on B commits from-B', () => {
+      const r = run('line', [down(B, 90, 0), up(B, 90, 0)], armed);
+      expect(r.effects).toEqual([
+        { type: 'commit', command: { type: 'add', objects: [{ id: 'n1', def: { type: 'line', a: 'A', b: 'B' } }] } },
+      ]);
+    });
+
+    it('drag from the armed endpoint to B commits; back onto it is invalid', () => {
+      const r = run('line', [down(A), up(B, 90, 0)], armed);
+      expect(commits(r.effects)).toHaveLength(1);
+      const r2 = run('line', [down(A), up(A, 40, 0)], armed);
+      expect(r2.effects).toEqual([{ type: 'invalid' }]);
+    });
+  });
+
+  it('jitter tap (down on A, up on B within slop) arms A without committing', () => {
+    const r = run('line', [down(A, 0, 0), up(B, 2, 0)]);
+    expect(r.state).toMatchObject({ mode: 'armed', from: A });
+    expect(r.effects).toEqual([]);
+  });
 });

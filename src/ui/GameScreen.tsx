@@ -1,8 +1,11 @@
+import { useSignal, type Signal } from '@preact/signals';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { Canvas } from '../canvas/Canvas';
 import { isPointValue } from '../canvas/candidates';
 import { toScreen, type Viewport } from '../canvas/viewport';
-import type { ObjDef } from '../construction/types';
+import type { ObjDef, Scene } from '../construction/types';
+import type { Curve } from '../geometry/curves';
+import type { Vec } from '../geometry/vec';
 import { LEVELS, levelById } from '../levels';
 import type { LevelId, ToolId } from '../levels/types';
 import type { Store } from '../state/store';
@@ -38,6 +41,64 @@ const TIPS: Partial<
 
 /** What this session has already shown, per store (one store per session); in memory only. */
 const seen = new WeakMap<Store, { tools: Set<ToolId>; tips: Set<LevelId> }>();
+/** Quiet time after the last viewport change before the caption is placed afresh. */
+const SETTLE_MS = 150;
+
+/**
+ * The level 1 caption over the canvas. It alone reads the viewport signal, so pans and
+ * pinches re-render only this overlay. A full placement runs when the step, scene or caption
+ * size changes and once the viewport settles; while the view is moving the last placement
+ * just follows its targets (clamped to the canvas).
+ */
+function CoachOverlay(p: {
+  view: Signal<Viewport | null>;
+  text: string | null;
+  scene: Scene;
+  targets: Vec[];
+  upcoming: (Vec | Curve)[];
+}) {
+  const vp = p.view.value;
+  const [settled, setSettled] = useState<Viewport | null>(null);
+  useEffect(() => {
+    const t = window.setTimeout(() => setSettled(p.view.peek()), SETTLE_MS);
+    return () => window.clearTimeout(t);
+  }, [vp]);
+  const last = useRef<{
+    key: unknown[];
+    vp: Viewport;
+    pos: Vec;
+    anchor: Vec;
+  } | null>(null);
+
+  const place = (box: Box): Vec | null => {
+    if (!vp || p.text === null) return null;
+    const targets = p.targets.map((t) => toScreen(vp, t));
+    const n = Math.max(targets.length, 1);
+    const anchor = targets.reduce((a, t) => ({ x: a.x + t.x / n, y: a.y + t.y / n }), {
+      x: 0,
+      y: 0,
+    });
+    const key = [p.scene, p.text, box.w, box.h];
+    const prev = last.current;
+    const fresh = !!prev && prev.key.every((k, i) => k === key[i]);
+    if (fresh && prev.vp === vp) return prev.pos;
+    if (fresh && vp !== settled) {
+      // Moving: keep the caption where it was relative to its targets.
+      const x = prev.pos.x + anchor.x - prev.anchor.x;
+      const y = prev.pos.y + anchor.y - prev.anchor.y;
+      return {
+        x: Math.min(Math.max(x, 0), Math.max(0, vp.width - box.w)),
+        y: Math.min(Math.max(y, 0), Math.max(0, vp.height - box.h)),
+      };
+    }
+    const avoid = avoidSamples(p.scene, p.upcoming, vp, targets);
+    const pos = placeCaption({ area: { w: vp.width, h: vp.height }, box, targets, avoid });
+    last.current = { key, vp, pos, anchor };
+    return pos;
+  };
+  return <CoachMark text={p.text} place={place} />;
+}
+
 const sessionOf = (store: Store) => {
   let s = seen.get(store);
   if (!s) seen.set(store, (s = { tools: new Set(), tips: new Set() }));
@@ -112,21 +173,20 @@ export function GameScreen({ store }: { store: Store }) {
     lastStep.current = coachStep;
   }, [coachStep]);
 
-  // The caption sits next to its targets, clear of the strokes about to be drawn.
-  const [vp, setVp] = useState<Viewport | null>(null);
-  const placeCoach = (box: Box) => {
-    if (!vp || !coachTargets) return null;
-    const targets = [
-      ...coachTargets.ids.flatMap((id) => {
-        const v = scene.byId.get(id)?.value;
-        return v && isPointValue(v) ? [v] : [];
-      }),
-      ...coachTargets.spots,
-    ].map((p) => toScreen(vp, p));
-    // The hint engine's next step, matched to the player's own objects, is what comes next.
-    const avoid = avoidSamples(scene, hint?.ghost ?? [], vp, targets);
-    return placeCaption({ area: { w: vp.width, h: vp.height }, box, targets, avoid });
-  };
+  // The caption sits next to its targets, clear of the strokes about to be drawn. Only the
+  // coach needs screen positions, so only then does the canvas report its viewport.
+  const view = useSignal<Viewport | null>(null);
+  const coachActive = firstTime && !!level.coach;
+  const coachWorld = coachTargets
+    ? [
+        ...coachTargets.ids.flatMap((id) => {
+          const v = scene.byId.get(id)?.value;
+          return v && isPointValue(v) ? [v] : [];
+        }),
+        ...coachTargets.spots,
+      ]
+    : [];
+  const onView = useMemo(() => (vp: Viewport | null) => (view.value = vp), [view]);
 
   // When the panel closes on its own (new hint step, completion) with focus inside it,
   // hand focus back to the Hint button; the completion card takes focus itself.
@@ -207,9 +267,17 @@ export function GameScreen({ store }: { store: Store }) {
         onTipDismiss={() => setTip(null)}
       />
       <main class="game-canvas" onPointerDown={() => setHintOpen(false)}>
-        <Canvas store={store} coach={coachTargets} onView={setVp} />
-        {firstTime && level.coach && (
-          <CoachMark key={level.id} text={coachShown?.text ?? null} place={placeCoach} />
+        <Canvas store={store} coach={coachTargets} onView={coachActive ? onView : undefined} />
+        {coachActive && (
+          <CoachOverlay
+            key={level.id}
+            view={view}
+            text={coachShown?.text ?? null}
+            scene={scene}
+            targets={coachWorld}
+            // The hint engine's next step, matched to the player's own objects.
+            upcoming={hint?.ghost ?? []}
+          />
         )}
       </main>
       {showHint && (

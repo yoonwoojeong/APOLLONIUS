@@ -376,6 +376,22 @@ describe('GameScreen level 1 coach', () => {
     expect(coach(host)!.textContent).toBe('Drag from A to B to draw a circle.');
   });
 
+  it('undoing back from step 4 to a circle step selects the circle tool again', () => {
+    const store = createStore(null);
+    store.openLevel('equilateral');
+    const host = mount(store);
+    step(store, 0);
+    step(store, 1);
+    step(store, 2);
+    settle();
+    expect(store.tool.value).toBe('line');
+    act(() => store.undo());
+    act(() => store.undo());
+    settle();
+    expect(coach(host)!.textContent).toBe('Now drag from B to A.');
+    expect(store.tool.value).toBe('circle');
+  });
+
   it('hides while the hint panel is open', () => {
     const store = createStore(null);
     store.openLevel('equilateral');

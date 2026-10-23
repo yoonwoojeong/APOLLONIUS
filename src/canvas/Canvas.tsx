@@ -109,7 +109,7 @@ export function Canvas({ store, coach, onView }: Props) {
   const overCanvas = useRef(false);
   const ownRevision = useRef(revision); // revision after the canvas's own last commit
 
-  useEffect(() => onView?.(vp), [vp]);
+  useEffect(() => onView?.(vp), [vp, onView]);
 
   // Latest render values for event handlers.
   const live = useRef({ scene, candidates, tool });

@@ -70,8 +70,8 @@ describe('level 1 coach', () => {
     expect(coach[3]!.spots?.(after(3))).toHaveLength(1); // only the crossing that was marked
   });
 
-  it('step 4 switches to the line tool; earlier steps keep the default', () => {
-    expect(coach.map((s) => s.tool)).toEqual([undefined, undefined, undefined, 'line']);
+  it('the circle steps select the circle tool, step 4 the line tool', () => {
+    expect(coach.map((s) => s.tool)).toEqual(['circle', 'circle', undefined, 'line']);
   });
 });
 

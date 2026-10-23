@@ -87,11 +87,13 @@ export const equilateral: Level = {
     {
       text: 'Drag from A to B to draw a circle.',
       target: ['A', 'B'],
+      tool: 'circle',
       doneWhen: (s) => hasCircle(s, 'A', 'B'),
     },
     {
       text: 'Now drag from B to A.',
       target: ['B', 'A'],
+      tool: 'circle',
       doneWhen: (s) => hasCircle(s, 'B', 'A'),
     },
     {

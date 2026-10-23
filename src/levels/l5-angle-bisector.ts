@@ -1,3 +1,5 @@
+import { FALLBACK } from './explain';
+import { bisectedPairs, labelOf } from '../reasoning/facts';
 import { lineThrough } from '../geometry/curves';
 import { add, normalize, sub } from '../geometry/vec';
 import { findCurveEq, pos } from './goals';
@@ -47,5 +49,10 @@ export const angleBisector: Level = {
       nudge: 'Points equidistant from A and B′ include V.',
     },
   ],
-  explain: () => '',
+  explain: (facts, s, m) => {
+    const pair = bisectedPairs(facts, m.ids[0] as string).find(([p, q]) => p === 'A' || q === 'A');
+    if (!pair) return FALLBACK;
+    const other = labelOf(s, pair[0] === 'A' ? pair[1] : pair[0]);
+    return `VA = V${other}, so V lies on the perpendicular bisector of A${other} — which splits the angle evenly.`;
+  },
 };

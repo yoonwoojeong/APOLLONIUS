@@ -1,3 +1,5 @@
+import { FALLBACK } from './explain';
+import { bisectedPairs, labelOf } from '../reasoning/facts';
 import { findPointAt, pos } from './goals';
 import { bisectorSteps } from './l2-perp-bisector';
 import type { Level } from './types';
@@ -35,5 +37,13 @@ export const midpoint: Level = {
       nudge: 'The midpoint sits where the bisector crosses AB.',
     },
   ],
-  explain: () => '',
+  explain: (facts, s, m) => {
+    const d = s.byId.get(m.ids[0] as string)?.def;
+    if (d?.type !== 'intersection') return FALLBACK;
+    const bisectsAB = [d.a, d.b].some((l) =>
+      bisectedPairs(facts, l).some(([p, q]) => (p === 'A' && q === 'B') || (p === 'B' && q === 'A')),
+    );
+    if (!bisectsAB) return FALLBACK;
+    return `The perpendicular bisector of AB crosses it exactly halfway, at ${labelOf(s, m.ids[0] as string)}.`;
+  },
 };

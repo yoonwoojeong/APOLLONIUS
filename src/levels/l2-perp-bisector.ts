@@ -1,3 +1,5 @@
+import { FALLBACK } from './explain';
+import { isEquidistant, labelOf } from '../reasoning/facts';
 import { perpBisector } from '../geometry/curves';
 import { findCurveEq, pos } from './goals';
 import type { Level, ReferenceStep } from './types';
@@ -48,5 +50,12 @@ export const perpBisectorLevel: Level = {
     return o && target ? { ids: [o.id], gold: [target] } : null;
   },
   reference: bisectorSteps,
-  explain: () => '',
+  explain: (facts, s, m) => {
+    const d = s.byId.get(m.ids[0] as string)?.def;
+    if (d?.type !== 'line') return FALLBACK;
+    const ok = [d.a, d.b].every((p) => isEquidistant(facts, p, ['A', 'B']));
+    if (!ok) return FALLBACK;
+    const [x, y] = [labelOf(s, d.a), labelOf(s, d.b)];
+    return `${x} and ${y} are each equidistant from A and B, so the line ${x}${y} is the perpendicular bisector.`;
+  },
 };

@@ -1,3 +1,5 @@
+import { FALLBACK } from './explain';
+import { isEquidistant, labelOf } from '../reasoning/facts';
 import { dist } from '../geometry/vec';
 import { eqPoint } from '../geometry/curves';
 import { findLine, isPoint, pos } from './goals';
@@ -56,5 +58,10 @@ export const equilateral: Level = {
       nudge: 'Join the new point to A and B.',
     },
   ],
-  explain: () => '',
+  explain: (facts, s, m) => {
+    const c = m.ids[0] as string;
+    if (!isEquidistant(facts, c, ['A', 'B'])) return FALLBACK;
+    const l = labelOf(s, c);
+    return `${l} lies on both circles, so ${l}A = AB = ${l}B.`;
+  },
 };

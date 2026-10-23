@@ -1,3 +1,5 @@
+import { FALLBACK } from './explain';
+import { bisectedPairs, labelOf } from '../reasoning/facts';
 import { onCurve } from '../geometry/curves';
 import { dot } from '../geometry/vec';
 import { isCurve, lineValue, pos } from './goals';
@@ -47,5 +49,10 @@ export const perpendicular: Level = {
       nudge: 'P is now the midpoint of A and A′.',
     },
   ],
-  explain: () => '',
+  explain: (facts, s, m) => {
+    const pair = bisectedPairs(facts, m.ids[0] as string).find(([p, q]) => p === 'A' || q === 'A');
+    if (!pair) return FALLBACK;
+    const other = labelOf(s, pair[0] === 'A' ? pair[1] : pair[0]);
+    return `P is the midpoint of A and ${other}, so the bisector of A${other} is perpendicular to ℓ at P.`;
+  },
 };

@@ -1,3 +1,5 @@
+import { FALLBACK } from './explain';
+import { bisectedPairs } from '../reasoning/facts';
 import { findPointAt, isCurve } from './goals';
 import type { Level } from './types';
 import { frame } from './view';
@@ -46,5 +48,10 @@ export const circleCenter: Level = {
       nudge: 'Two such lines meet at the centre.',
     },
   ],
-  explain: () => '',
+  explain: (facts, s, m) => {
+    const d = s.byId.get(m.ids[0] as string)?.def;
+    if (d?.type !== 'intersection') return FALLBACK;
+    const ok = [d.a, d.b].every((l) => bisectedPairs(facts, l).length > 0);
+    return ok ? 'Both lines are perpendicular bisectors of chords, so each passes through the centre.' : FALLBACK;
+  },
 };

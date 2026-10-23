@@ -146,8 +146,11 @@ export function GameScreen({ store, sidePanel, marked }: Props) {
     const available = store.availableTools();
     const session = sessionOf(store);
     setHintOpen(false);
-    // A later tool appearing for the first time this session scales in.
-    const fresh = REVEALABLE.find((x) => available.includes(x) && !session.tools.has(x)) ?? null;
+    // A later tool appearing for the first time this session scales in. Only built-in levels
+    // reveal it: a custom level or the editor's sandbox must not use up the game's reveal.
+    const fresh = builtInId
+      ? (REVEALABLE.find((x) => available.includes(x) && !session.tools.has(x)) ?? null)
+      : null;
     if (fresh) session.tools.add(fresh);
     setReveal(fresh);
     // A level's tip shows the first time that level is opened this session.

@@ -460,6 +460,20 @@ describe('GameScreen with a custom level', () => {
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 
+  it('a custom level or the sandbox with the new tool never consumes its built-in reveal', () => {
+    const store = createStore(
+      storageWith({ version: 1, levels: {}, unlockedTools: ['perp-bisector'] }),
+    );
+    const withTool: Level = { ...levelById('perpendicular'), id: 'problem:p1', number: undefined };
+    store.openCustomLevel(withTool, { onExit: vi.fn() });
+    const host = mount(store);
+    expect(button(host, 'Perpendicular bisector')!.classList.contains('is-revealing')).toBe(false);
+    act(() => store.openCustomLevel({ ...withTool }, { sandbox: true, onExit: vi.fn() }));
+    expect(button(host, 'Perpendicular bisector')!.classList.contains('is-revealing')).toBe(false);
+    act(() => store.openLevel('perpendicular'));
+    expect(button(host, 'Perpendicular bisector')!.classList.contains('is-revealing')).toBe(true);
+  });
+
   it('completion card offers Back and Replay, not Next or Map', () => {
     const store = createStore(null);
     const onExit = vi.fn();

@@ -669,6 +669,8 @@ export function createEditor(
     setup: setup as Signal<SetupModel>,
     solution: solution as Signal<ProblemStep[]>,
     broken: broken as ReadonlySignal<number | null>,
+    /** The solution's own move counts (the lower bound of par). */
+    moves: computed(() => replayed.value.moves) as ReadonlySignal<{ L: number; E: number }>,
     targets: targets as Signal<ObjId[]>,
     details: details as Signal<EditorDetails>,
     validation: validation as ReadonlySignal<ReturnType<typeof validate>>,

@@ -3,11 +3,13 @@ import type { ObjDef, ObjId } from '../construction/types';
 import { GameScreen, isTextEntry } from '../ui/GameScreen';
 import { FitIcon } from '../ui/icons';
 import type { Editor, EditorMode } from './editorStore';
+import { DetailsPanel } from './DetailsPanel';
 import { EDITOR_PANEL_ID, ModeBar, modeTabId } from './ModeBar';
 import { SetupCanvas } from './SetupCanvas';
 import { dependants, LABEL_RE, type SetupModel, type SetupTool } from './setupGestures';
 import { SETUP_TOOLS, SetupPalette } from './SetupPalette';
 import { StepsPanel } from './StepsPanel';
+import { TestPanel } from './TestPanel';
 import './editor.css';
 
 /** "point A", "segment AB", "circle centred at A" — how a given reads in the delete prompt. */
@@ -331,11 +333,6 @@ function SetupMode({
   );
 }
 
-const PLACEHOLDER: Record<'details' | 'test', { title: string; text: string }> = {
-  details: { title: 'Details', text: 'Title, goal, tools and par are set here.' },
-  test: { title: 'Test', text: 'Play your problem here once it passes every check.' },
-};
-
 /** The problem editor: the mode bar over Setup, Solve (the game), Details or Test. */
 export function EditorScreen({ editor }: { editor: Editor }) {
   const mode: EditorMode = editor.mode.value;
@@ -368,12 +365,8 @@ export function EditorScreen({ editor }: { editor: Editor }) {
             marked={editor.targets.value}
           />
         )}
-        {(mode === 'details' || mode === 'test') && (
-          <section class="editor-placeholder">
-            <h2>{PLACEHOLDER[mode].title}</h2>
-            <p>{PLACEHOLDER[mode].text}</p>
-          </section>
-        )}
+        {mode === 'details' && <DetailsPanel editor={editor} />}
+        {mode === 'test' && <TestPanel editor={editor} />}
       </div>
     </div>
   );

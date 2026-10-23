@@ -305,12 +305,6 @@ describe('EditorScreen', () => {
     expect(host.querySelector('[data-testid="setup-canvas"]')).not.toBeNull();
   });
 
-  it('renders a placeholder for Details and Test', () => {
-    const { host } = setup();
-    click(tab(host, 'Test'));
-    expect(host.querySelector('.editor-placeholder')).not.toBeNull();
-  });
-
   it('remounts the editor for a different draft', () => {
     const { game, host } = setup();
     const before = host.querySelector('[data-testid="setup-canvas"]');

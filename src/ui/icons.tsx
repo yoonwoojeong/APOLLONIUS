@@ -1,5 +1,9 @@
 import type { ComponentChildren } from 'preact';
 
+/** Five-pointed star in a 24×24 box; shared by the completion card and the level map. */
+export const STAR_PATH =
+  'M12 2.8l2.75 5.82 6.35.8-4.66 4.4 1.2 6.3L12 17.03l-5.64 3.1 1.2-6.3L2.9 9.42l6.35-.8z';
+
 function Icon({ children }: { children: ComponentChildren }) {
   return (
     <svg

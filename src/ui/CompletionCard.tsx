@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef } from 'preact/hooks';
 import type { ToolId } from '../levels/types';
 import type { Stars } from '../reasoning/stars';
-import { ArrowIcon, PerpBisectorIcon } from './icons';
+import { ArrowIcon, PerpBisectorIcon, STAR_PATH as STAR } from './icons';
 
 interface Props {
   stars: Stars;
@@ -22,9 +22,6 @@ const TOOL_TITLES: Record<ToolId, string> = {
   circle: 'Circle',
   'perp-bisector': 'Perpendicular Bisector',
 };
-
-const STAR =
-  'M12 2.8l2.75 5.82 6.35.8-4.66 4.4 1.2 6.3L12 17.03l-5.64 3.1 1.2-6.3L2.9 9.42l6.35-.8z';
 
 /**
  * The completion card (§5.5): slides up after the gold draw-on, stars fill one by one,

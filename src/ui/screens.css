@@ -1,0 +1,387 @@
+/*
+ * Title screen and level map. Colours come from tokens only. The draw-on (.draw-in, .pop-in)
+ * and the shared buttons (.btn, .theme-toggle) come from canvas.css and game.css.
+ */
+
+.screen {
+  position: relative;
+  min-height: 100%;
+  background-color: var(--bg);
+  /* The canvas's faint dot grid, so every screen is the same sheet of paper. */
+  background-image: radial-gradient(circle, var(--grid) 1.1px, transparent 1.6px);
+  background-size: 28px 28px;
+  background-position: center;
+}
+
+.screen-corner {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+
+/* Title */
+
+.title-screen {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 72px 16px;
+}
+
+.title-block {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  translate: 0 -4vh;
+}
+
+.title-word {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(56px, 15vw, 104px);
+  font-weight: 380;
+  line-height: 1;
+  letter-spacing: -0.025em;
+  animation: screen-in var(--t-ui) var(--ease-out) both;
+}
+
+/* Fixed widths keep the 1.5 px stroke exact: 1.6 units at 300 px, 1.26 at 380 px. */
+.title-arc {
+  width: 300px;
+  height: auto;
+  margin-top: 14px;
+  overflow: visible;
+}
+
+.title-arc path {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+.title-arc .draw-in {
+  animation-delay: 160ms;
+}
+
+.title-arc-end {
+  fill: var(--ink);
+}
+
+.title-arc .pop-in {
+  animation-delay: calc(160ms + var(--t-draw) - 40ms);
+}
+
+.title-sub {
+  margin: 18px 0 0;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  animation: screen-in var(--t-ui) var(--ease-out) 260ms both;
+}
+
+.btn.title-start {
+  flex: none;
+  min-width: 184px;
+  margin-top: 44px;
+  animation: screen-in var(--t-ui) var(--ease-out) 340ms both;
+}
+
+@keyframes screen-in {
+  from {
+    opacity: 0;
+    translate: 0 6px;
+  }
+}
+
+/* Level map */
+
+.map {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 18px 16px 40px;
+}
+
+.map-head {
+  padding: 4px 56px 0 8px;
+}
+
+.map-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 450;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+.map-summary {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.map-stage {
+  position: relative;
+  align-self: center;
+  justify-self: center;
+  width: min(100%, 420px);
+  aspect-ratio: 100 / 170;
+  margin-top: 16px;
+}
+
+.map-arc {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.map-arc path {
+  fill: none;
+  stroke-linecap: round;
+}
+
+/* 1.5 px whatever the stage width: viewBox units per pixel, from --stage-w. */
+.map-arc.is-narrow path {
+  stroke-width: calc(150 / var(--stage-w, 358));
+}
+
+.map-arc.is-wide path {
+  stroke-width: calc(1500 / var(--stage-w, 1080));
+}
+
+.map-arc-base {
+  stroke: var(--ink-ghost);
+}
+
+.map-arc-done {
+  stroke: var(--ink);
+}
+
+.map-arc .map-arc-done {
+  animation-delay: var(--t-draw);
+}
+
+.map-arc.is-wide {
+  display: none;
+}
+
+.map-nodes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.map-item {
+  position: absolute;
+  left: var(--nx);
+  top: var(--ny);
+  animation: screen-in var(--t-ui) var(--ease-out) calc(var(--i) * var(--t-draw)) both;
+}
+
+.map-node {
+  position: absolute;
+  left: -22px;
+  top: 0;
+  translate: 0 -50%;
+  display: grid;
+  grid-template-columns: 44px auto;
+  grid-template-areas:
+    'dot label'
+    'dot stars';
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 3px;
+  width: max-content;
+  max-width: 260px;
+  min-height: 44px;
+  padding: 4px 12px 4px 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Locked: 40% ink. The point stays opaque (mixed, not faded) so the arc never shows through. */
+.map-node:disabled {
+  cursor: default;
+}
+
+.map-node:disabled .map-label,
+.map-node:disabled .map-stars {
+  opacity: 0.4;
+}
+
+.map-node:disabled .map-dot {
+  border-color: color-mix(in srgb, var(--ink) 40%, var(--bg));
+}
+
+.map-dot {
+  grid-area: dot;
+  justify-self: center;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--bg);
+  transition:
+    transform var(--t-ui) var(--ease-out),
+    box-shadow var(--t-ui) var(--ease-out);
+}
+
+.map-node[data-solved='true'] .map-dot {
+  background: var(--ink);
+}
+
+/* "You are here": the selection ring, offset from the point like a snap target. */
+.map-node[aria-current] .map-dot {
+  box-shadow:
+    0 0 0 4px var(--bg),
+    0 0 0 5.5px var(--snap);
+}
+
+.map-node:not(:disabled):hover .map-dot {
+  transform: scale(1.2);
+}
+
+.map-label {
+  grid-area: label;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 450;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.map-num {
+  margin-right: 4px;
+  font-size: 15px;
+  font-weight: 400;
+  font-style: italic;
+  color: var(--muted);
+  font-variant-numeric: oldstyle-nums;
+}
+
+.map-stars {
+  grid-area: stars;
+  display: flex;
+  gap: 3px;
+}
+
+.map-star {
+  width: 14px;
+  height: 14px;
+}
+
+.map-star path {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.75;
+  stroke-linejoin: round;
+}
+
+.map-star[data-earned='true'] path {
+  fill: var(--gold);
+  stroke: var(--gold);
+}
+
+@media (min-width: 768px) {
+  .screen-corner {
+    top: 14px;
+    right: 16px;
+  }
+
+  .map {
+    padding: 28px 40px 48px;
+  }
+
+  .map-head {
+    padding-left: 4px;
+  }
+
+  .map-title {
+    font-size: 30px;
+  }
+
+  .map-stage {
+    width: min(100%, 1080px);
+    aspect-ratio: 1000 / 380;
+    margin-top: 0;
+  }
+
+  .map-arc.is-wide {
+    display: block;
+  }
+
+  .title-arc {
+    width: 380px;
+  }
+
+  .title-arc path {
+    stroke-width: 1.26;
+  }
+
+  .map-arc.is-narrow {
+    display: none;
+  }
+
+  .map-item {
+    left: var(--wx);
+    top: var(--wy);
+  }
+
+  .map-node {
+    left: 0;
+    top: -22px;
+    translate: -50% 0;
+    grid-template-columns: auto;
+    grid-template-rows: 44px auto auto;
+    grid-template-areas:
+      'dot'
+      'label'
+      'stars';
+    justify-items: center;
+    row-gap: 6px;
+    width: 172px;
+    max-width: none;
+    padding: 0 6px 8px;
+    text-align: center;
+  }
+
+  .map-stars {
+    margin-top: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .title-word,
+  .title-sub,
+  .btn.title-start,
+  .map-item {
+    animation: ui-fade-in 80ms linear both;
+  }
+
+  .title-arc .draw-in,
+  .title-arc .pop-in,
+  .map-arc .map-arc-done {
+    animation-delay: 0ms;
+  }
+
+  .map-dot {
+    transition-duration: 80ms;
+  }
+
+  .map-node:not(:disabled):hover .map-dot {
+    transform: none;
+  }
+}

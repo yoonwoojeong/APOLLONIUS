@@ -61,6 +61,7 @@
     'goal goal counter';
   align-items: center;
   column-gap: 8px;
+  row-gap: 2px;
   padding: 6px 12px 10px 8px;
   border-bottom: 1px solid var(--grid);
   background: var(--surface);
@@ -78,13 +79,11 @@
   min-width: 0;
   margin: 0;
   font-family: var(--font-display);
-  font-size: 19px;
+  font-size: 18px;
   font-weight: 500;
   line-height: 1.2;
   letter-spacing: -0.005em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-wrap: balance;
 }
 
 .level-num {
@@ -99,12 +98,12 @@
   grid-area: goal;
   min-width: 0;
   margin: 0;
+  align-self: start;
   padding-left: 8px;
   font-size: 14px;
+  line-height: 1.4;
   color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-wrap: pretty;
 }
 
 .counter {
@@ -114,7 +113,9 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
   color: var(--ink);
+  line-height: 1.5;
   white-space: nowrap;
+  align-self: start;
   justify-self: end;
 }
 
@@ -187,6 +188,16 @@
   color: inherit;
 }
 
+@media (max-width: 399px) {
+  .topbar-title {
+    font-size: 17px;
+  }
+
+  .topbar-goal {
+    font-size: 13.5px;
+  }
+}
+
 /* Wide screens: single-row top bar, palette as a left rail. */
 
 @media (min-width: 768px) {
@@ -208,15 +219,21 @@
 
   .topbar-title {
     font-size: 20px;
+    white-space: nowrap;
   }
 
   .topbar-goal {
+    align-self: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     padding-left: 16px;
     border-left: 1px solid var(--grid);
     line-height: 1.6;
   }
 
   .counter {
+    align-self: center;
     padding-right: 8px;
   }
 

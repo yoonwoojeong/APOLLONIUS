@@ -58,7 +58,7 @@ function ghostFor(g: GestureState, tool: ToolId, pointer: Vec | null): GhostView
 /** The construction canvas: viewport, pointer plumbing, gestures, pinch/pan and keyboard. */
 export function Canvas({ store }: { store: Store }) {
   const tool = store.tool.value;
-  void store.revision.value; // re-render on every construction change
+  const revision = store.revision.value; // re-render on every construction change
   const level = levelById(store.levelId.value);
   const construction = store.construction();
   const scene = construction.scene();
@@ -93,6 +93,7 @@ export function Canvas({ store }: { store: Store }) {
   const shakeTimer = useRef(0);
   const pulseTimer = useRef(0);
   const overCanvas = useRef(false);
+  const ownRevision = useRef(revision); // revision after the canvas's own last commit
 
   // Latest render values for event handlers.
   const live = useRef({ scene, candidates, tool });
@@ -104,6 +105,15 @@ export function Canvas({ store }: { store: Store }) {
     setShake(null);
     setPulse(null);
   }, [construction]);
+
+  // A change the canvas did not commit itself (undo/redo/reset) may remove the gesture's
+  // anchor: drop the gesture, its ghost and any snap preview.
+  useEffect(() => {
+    if (revision === ownRevision.current) return;
+    if (gesture.current.mode !== 'idle') dispatch({ type: 'cancel' });
+    setShake(null);
+    setHover(null);
+  }, [revision]);
 
   // Tool switch cancels the gesture in progress.
   useEffect(() => dispatch({ type: 'tool', tool }), [tool]);
@@ -138,6 +148,7 @@ export function Canvas({ store }: { store: Store }) {
     }
     if (eff.type === 'invalid') return startShake(before);
     const r = store.apply(eff.command);
+    ownRevision.current = store.revision.peek();
     if (r.ok) return; // useSceneAnimation draws it on
     if (r.reason === 'duplicate') {
       setPulse({ ids: [r.existingId], key: ++keys.current });

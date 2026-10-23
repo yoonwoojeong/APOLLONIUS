@@ -13,6 +13,8 @@ interface Props {
   onHint: () => void;
   /** The hint panel is showing (the Hint button reflects it). */
   hintOpen?: boolean;
+  /** Hints have nothing to say (the level is solved and the completion card shows). */
+  hintDisabled?: boolean;
   /** Focus returns here when the hint panel closes. */
   hintRef?: Ref<HTMLButtonElement>;
   onMap: () => void;
@@ -65,6 +67,7 @@ export function TopBar(props: Props) {
           aria-haspopup="dialog"
           aria-expanded={!!props.hintOpen}
           title="Hint"
+          disabled={!!props.hintDisabled}
           onClick={onHint}
         >
           <HintIcon />

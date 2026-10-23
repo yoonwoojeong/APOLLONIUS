@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
+import { describe } from '../construction/describe';
 import type { ObjId, Scene, SceneObject } from '../construction/types';
 import type { Curve } from '../geometry/curves';
 import type { Vec } from '../geometry/vec';
@@ -32,6 +33,8 @@ interface Props {
   highlight?: { ids: ObjId[]; key: number } | null;
   ghost?: GhostView | null;
   snap?: SnapTarget | null;
+  /** The armed gesture's first endpoint (world), marked until the gesture ends. */
+  armed?: Vec | null;
   /** Changes whenever the gesture locks onto a new target, replaying the lock pulse. */
   lockKey?: number;
   goldMatch?: GoalMatch | null;
@@ -125,6 +128,49 @@ function PointEl(p: {
           {p.obj.label}
         </text>
       )}
+    </g>
+  );
+}
+
+/** "Intersection of circle … and line …", plus where it sits when its pair crosses twice. */
+function candidateLabel(c: Candidate, all: Candidate[], scene: Scene, view: Viewport): string {
+  const name = (id: ObjId): string => {
+    const o = scene.byId.get(id);
+    const d = o ? describe(o, scene) : id;
+    return d.charAt(0).toLowerCase() + d.slice(1);
+  };
+  const base = `Intersection of ${name(c.a)} and ${name(c.b)}`;
+  const twin = all.find((o) => o !== c && o.a === c.a && o.b === c.b);
+  if (!twin) return base;
+  const p = toScreen(view, c.pos);
+  const q = toScreen(view, twin.pos);
+  const side =
+    Math.abs(p.y - q.y) >= Math.abs(p.x - q.x)
+      ? p.y < q.y
+        ? 'upper'
+        : 'lower'
+      : p.x < q.x
+        ? 'left'
+        : 'right';
+  return `${base}, ${side}`;
+}
+
+/** A crossing that can become a point: a tab stop after the points, marked by Enter. */
+function CandidateEl({ c, label, view }: { c: Candidate; label: string; view: Viewport }) {
+  const p = toScreen(view, c.pos);
+  return (
+    <g
+      data-kind="candidate"
+      data-a={c.a}
+      data-b={c.b}
+      data-index={c.index}
+      role="button"
+      tabindex={0}
+      aria-label={label}
+      class="candidate-stop"
+      transform={`translate(${p.x} ${p.y})`}
+    >
+      <circle class="candidate" r={CANDIDATE_R} />
     </g>
   );
 }
@@ -331,7 +377,7 @@ function Shimmer({ match, view }: { match: GoalMatch; view: Viewport }) {
   );
 }
 
-/** Renders the scene in screen space: curves, candidates, ghost, points, snap, overlays. */
+/** Renders the scene in screen space: curves, ghost, points, candidates, snap, overlays. */
 export function SceneLayer(props: Props) {
   const { scene, view, ghost, snap, animating, highlight, goldMatch } = props;
   const candidates = useMemo(
@@ -407,21 +453,6 @@ export function SceneLayer(props: Props) {
       </g>
       {hintGhost.length > 0 && <HintGhost values={hintGhost} view={view} />}
       {goldMatch && <GoldLayer match={goldMatch} view={view} />}
-      <g class="candidates">
-        {candidates.map((c) => {
-          const p = toScreen(view, c.pos);
-          return (
-            <circle
-              key={`${c.a}-${c.b}-${c.index}`}
-              data-kind="candidate"
-              class="candidate"
-              cx={p.x}
-              cy={p.y}
-              r={CANDIDATE_R}
-            />
-          );
-        })}
-      </g>
       {ghost && (
         <GhostEl key={ghost.shake ?? 0} ghost={ghost} view={view} onEnd={props.onGhostEnd} />
       )}
@@ -437,6 +468,27 @@ export function SceneLayer(props: Props) {
           />
         ))}
       </g>
+      {/* After the points so Tab reaches the crossings once every point is visited. */}
+      <g class="candidates">
+        {candidates.map((c) => (
+          <CandidateEl
+            key={`${c.a}-${c.b}-${c.index}`}
+            c={c}
+            label={candidateLabel(c, candidates, scene, view)}
+            view={view}
+          />
+        ))}
+      </g>
+      {props.armed && (
+        <g
+          data-kind="armed"
+          class="armed"
+          aria-hidden="true"
+          transform={`translate(${toScreen(view, props.armed).x} ${toScreen(view, props.armed).y})`}
+        >
+          <circle class="armed-ring" r={POINT_R * SNAP_SCALE + 8} />
+        </g>
+      )}
       {snap && <SnapMarker key={props.lockKey ?? 0} snap={snap} scene={scene} view={view} />}
       <g class="pulses" aria-hidden="true" onAnimationEnd={() => props.onHighlightEnd?.()}>
         {pulsed.map((o) =>

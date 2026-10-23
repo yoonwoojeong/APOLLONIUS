@@ -116,6 +116,24 @@
 .candidate {
   fill: var(--ink);
   opacity: 0.5;
+}
+
+/* Crossings are keyboard stops only; pointers snap to them through the canvas. */
+.candidate-stop {
+  outline: none;
+  pointer-events: none;
+}
+
+.candidate-stop:focus-visible .candidate {
+  fill: var(--snap);
+  opacity: 1;
+}
+
+/* The armed gesture's first endpoint stays ringed until the gesture ends. */
+.armed-ring {
+  fill: none;
+  stroke: var(--snap);
+  stroke-width: 1.5px;
   pointer-events: none;
 }
 

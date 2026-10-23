@@ -47,8 +47,12 @@
   --muted: rgb(232 230 225 / 55%);
 }
 
+/* Reduced motion: every draw-on and interface transition becomes a short fade, and the
+   star fills arrive together instead of one by one. */
 @media (prefers-reduced-motion: reduce) {
   :root {
     --t-draw: 80ms;
+    --t-ui: 80ms;
+    --t-star: 0ms;
   }
 }

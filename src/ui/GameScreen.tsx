@@ -240,12 +240,17 @@ export function GameScreen({ store }: { store: Store }) {
 
   return (
     <div class="game">
+      {/* Always mounted, so a tip that appears is announced (a fresh live region often is not). */}
+      <div role="status" class="sr-only">
+        {tip ?? ''}
+      </div>
       <TopBar
         level={level}
         moves={construction.moves()}
         targets={level.targets}
         onHint={onHint}
         hintOpen={showHint}
+        hintDisabled={!!completion}
         hintRef={hintBtn}
         onMap={store.goToMap}
         theme={store.progress.value.theme}

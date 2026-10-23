@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useId, useRef } from 'preact/hooks';
 import type { Hint } from '../reasoning/hints';
 import { CloseIcon, HintIcon } from './icons';
 
@@ -15,6 +15,7 @@ interface Props {
  */
 export function HintPanel({ hint, tier, onMore, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const nudgeId = useId();
 
   useEffect(() => {
     ref.current?.focus({ preventScroll: true });
@@ -32,6 +33,7 @@ export function HintPanel({ hint, tier, onMore, onClose }: Props) {
       class="hint-panel"
       role="dialog"
       aria-label="Hint"
+      aria-describedby={nudgeId}
       tabIndex={-1}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
@@ -45,16 +47,19 @@ export function HintPanel({ hint, tier, onMore, onClose }: Props) {
           <HintIcon />
           Hint
         </span>
-        <span class="hint-steps" aria-label={`Level ${tier} of 3`}>
+        <span class="hint-steps">
           {[1, 2, 3].map((n) => (
-            <span key={n} class={n <= tier ? 'hint-step is-on' : 'hint-step'} />
+            <span key={n} class={n <= tier ? 'hint-step is-on' : 'hint-step'} aria-hidden="true" />
           ))}
+          <span class="sr-only">Hint step {tier} of 3</span>
         </span>
         <button type="button" class="icon-btn hint-close" aria-label="Close hint" onClick={onClose}>
           <CloseIcon />
         </button>
       </div>
-      <p class="hint-nudge">{hint.nudge}</p>
+      <p id={nudgeId} class="hint-nudge">
+        {hint.nudge}
+      </p>
       <div class="hint-tiers" aria-live="polite">
         {tier >= 2 && (
           <p class="hint-tier">

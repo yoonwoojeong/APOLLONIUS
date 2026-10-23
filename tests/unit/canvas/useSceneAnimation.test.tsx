@@ -61,4 +61,28 @@ describe('useSceneAnimation', () => {
     expect(latest.animating?.drawIn).toEqual([]);
     expect(latest.animating?.drawOut?.ids).toEqual(['c1']);
   });
+
+  it('announces undo and redo by name', () => {
+    c.undo();
+    show();
+    expect(latest.announce).toBe('Undid: Circle centered at A through B');
+    c.redo();
+    show();
+    expect(latest.announce).toBe('Redid: Circle centered at A through B');
+  });
+
+  it('a repeat of the same announcement still changes the text, so it is read again', () => {
+    vi.spyOn(c, 'lastChange').mockReturnValue({ added: ['c1'], removed: [], kind: 'apply' });
+    c.undo();
+    c.redo(); // a new scene whose change reads exactly like the last one
+    show();
+    expect(latest.announce).not.toBe('Circle centered at A through B');
+    expect(latest.announce.trim()).toBe('Circle centered at A through B');
+  });
+
+  it('announces a reset', () => {
+    c.apply({ type: 'reset' });
+    show();
+    expect(latest.announce).toBe('Construction reset');
+  });
 });

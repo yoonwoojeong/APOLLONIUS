@@ -82,4 +82,12 @@ describe('HintPanel', () => {
     const host = mount(1);
     expect(host.querySelector('[role="dialog"]')!.contains(document.activeElement)).toBe(true);
   });
+
+  it('names the hint step in text and describes the dialog by the nudge', () => {
+    const host = mount(2);
+    const dialog = host.querySelector('[role="dialog"]')!;
+    expect(host.querySelector('.hint-steps')!.textContent).toBe('Hint step 2 of 3');
+    const nudge = document.getElementById(dialog.getAttribute('aria-describedby')!);
+    expect(nudge?.textContent).toBe('Which points are exactly AB away from A?');
+  });
 });

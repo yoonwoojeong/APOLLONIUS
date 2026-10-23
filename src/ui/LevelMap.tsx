@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 import type { Level, LevelId } from '../levels/types';
 import type { Progress } from '../state/persistence';
 import { STAR_PATH } from './icons';
@@ -118,6 +118,16 @@ export function LevelMap({ levels, progress, isUnlocked, current, onOpen }: Prop
     return () => ro.disconnect();
   }, []);
 
+  // Focus starts on the current level (Continue's target), else the first open one.
+  const nodes = useRef<HTMLOListElement>(null);
+  useEffect(() => {
+    const list = nodes.current;
+    const el =
+      list?.querySelector<HTMLButtonElement>('.map-node[aria-current]') ??
+      list?.querySelector<HTMLButtonElement>('.map-node:not(:disabled)');
+    el?.focus({ preventScroll: true });
+  }, []);
+
   return (
     <main class="map">
       <header class="map-head">
@@ -129,7 +139,7 @@ export function LevelMap({ levels, progress, isUnlocked, current, onOpen }: Prop
       <div class="map-stage" ref={stage}>
         <ArcLayer arc={WIDE} n={n} done={done} cls="is-wide" />
         <ArcLayer arc={NARROW} n={n} done={done} cls="is-narrow" />
-        <ol class="map-nodes">
+        <ol class="map-nodes" ref={nodes}>
           {levels.map((l, i) => {
             const w = at(WIDE, nodeAngle(WIDE, i, n));
             const m = at(NARROW, nodeAngle(NARROW, i, n));

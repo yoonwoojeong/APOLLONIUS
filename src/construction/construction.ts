@@ -7,12 +7,19 @@ const LABELS = 'CDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const isPointDef = (t: string): boolean =>
   t === 'given-point' || t === 'free-point' || t === 'on-curve' || t === 'intersection';
 
+/** What the last successful apply/undo/redo changed, and which of them it was. */
+export interface Change {
+  added: ObjId[];
+  removed: ObjId[];
+  kind: 'apply' | 'undo' | 'redo';
+}
+
 export class Construction {
   private commands: Command[] = [];
   private cursor = 0;
   private current: Scene;
   private nextId = 1;
-  private last: { added: ObjId[]; removed: ObjId[] } = { added: [], removed: [] };
+  private last: Change = { added: [], removed: [], kind: 'apply' };
 
   constructor(
     private readonly givens: ObjSpec[],
@@ -68,13 +75,14 @@ export class Construction {
     return new Set(scene.objects.map((o) => o.id));
   }
 
-  private refresh(): void {
+  private refresh(kind: Change['kind'] = 'apply'): void {
     const before = this.ids(this.current);
     this.current = this.build(this.activeSpecs());
     const after = this.ids(this.current);
     this.last = {
       added: [...after].filter((i) => !before.has(i)),
       removed: [...before].filter((i) => !after.has(i)),
+      kind,
     };
   }
 
@@ -121,14 +129,14 @@ export class Construction {
   undo(): boolean {
     if (!this.canUndo()) return false;
     this.cursor--;
-    this.refresh();
+    this.refresh('undo');
     return true;
   }
 
   redo(): boolean {
     if (!this.canRedo()) return false;
     this.cursor++;
-    this.refresh();
+    this.refresh('redo');
     return true;
   }
 
@@ -151,7 +159,7 @@ export class Construction {
     return this.activeSpecs();
   }
 
-  lastChange(): { added: ObjId[]; removed: ObjId[] } {
-    return { added: [...this.last.added], removed: [...this.last.removed] };
+  lastChange(): Change {
+    return { ...this.last, added: [...this.last.added], removed: [...this.last.removed] };
   }
 }

@@ -150,14 +150,14 @@ suite('Construction', () => {
     expect(s.byId.get('w')?.value).toBeNull();
   });
 
-  test('lastChange reports added ids after apply and removed ids after undo', () => {
+  test('lastChange reports added/removed ids and whether it was an apply, undo or redo', () => {
     const c = mk();
     c.apply(addCircle('A', 'B'));
-    expect(c.lastChange()).toEqual({ added: ['k'], removed: [] });
+    expect(c.lastChange()).toEqual({ added: ['k'], removed: [], kind: 'apply' });
     c.undo();
-    expect(c.lastChange()).toEqual({ added: [], removed: ['k'] });
+    expect(c.lastChange()).toEqual({ added: [], removed: ['k'], kind: 'undo' });
     c.redo();
-    expect(c.lastChange()).toEqual({ added: ['k'], removed: [] });
+    expect(c.lastChange()).toEqual({ added: ['k'], removed: [], kind: 'redo' });
   });
 
   test('allocId yields o1, o2 and specs lists givens then objects', () => {

@@ -60,7 +60,8 @@ export function ToolPalette(p: Props) {
                 </span>
               </button>
               {t === p.tipTool && p.tip && (
-                <div class="tool-tip" role="status" onClick={p.onTipDismiss}>
+                // The screen announces the tip through its own persistent status region.
+                <div class="tool-tip" onClick={p.onTipDismiss}>
                   <span class="tool-tip-text">{p.tip}</span>
                   <button type="button" class="tool-tip-close" aria-label="Dismiss tip">
                     <CloseIcon />

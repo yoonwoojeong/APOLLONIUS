@@ -43,7 +43,7 @@
     opacity var(--t-ui) var(--ease-out);
 }
 
-.icon-btn:hover,
+.icon-btn:hover:not(:disabled),
 .theme-toggle:hover,
 .tool-btn:hover:not(:disabled) {
   color: var(--ink);
@@ -167,6 +167,7 @@
   background: color-mix(in srgb, var(--snap) 13%, transparent);
 }
 
+.icon-btn:disabled,
 .tool-btn:disabled {
   opacity: 0.35;
   cursor: default;

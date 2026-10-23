@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { dist, sub, type Vec } from '../geometry/vec';
 import { levelById } from '../levels';
-import type { ObjId } from '../construction/types';
+import type { ObjId, Scene } from '../construction/types';
 import type { ToolId } from '../levels/types';
 import type { Store } from '../state/store';
-import { candidateIntersections } from './candidates';
+import { candidateIntersections, isPointValue, type Candidate } from './candidates';
 import {
   gestureReducer,
   TAP_SLOP_PX,
@@ -18,7 +18,7 @@ import { gridPattern } from './shapes';
 import { findSnap, type InputKind, type SnapTarget } from './snap';
 import { useSceneAnimation } from './useSceneAnimation';
 import { useViewport } from './useViewport';
-import { toWorld, type Viewport } from './viewport';
+import { toScreen, toWorld, type Viewport } from './viewport';
 import './canvas.css';
 
 const DOUBLE_TAP_MS = 320;
@@ -48,6 +48,24 @@ const isTextEntry = (t: EventTarget | null): boolean =>
 /** Focus on a control (e.g. the tool button just clicked) rather than on the page or canvas. */
 const isControl = (t: EventTarget | null): boolean =>
   t instanceof HTMLElement && t !== document.body && !(t instanceof SVGElement);
+
+/** The point or crossing a keyboard stop on the canvas stands for. */
+function stopTarget(
+  el: EventTarget | null,
+  scene: Scene,
+  candidates: Candidate[],
+): SnapTarget | null {
+  const stop = el instanceof Element ? el.closest('[data-kind=point],[data-kind=candidate]') : null;
+  if (!stop) return null;
+  if (stop.getAttribute('data-kind') === 'point') {
+    const id = stop.getAttribute('data-id') ?? '';
+    const v = scene.byId.get(id)?.value;
+    return v && isPointValue(v) ? { kind: 'point', id, pos: v } : null;
+  }
+  const [a, b, i] = ['data-a', 'data-b', 'data-index'].map((n) => stop.getAttribute(n));
+  const c = candidates.find((x) => x.a === a && x.b === b && String(x.index) === i);
+  return c ? { kind: 'candidate', c, pos: c.pos } : null;
+}
 
 /** Ghost from the gesture's start to the snapped endpoint, or to the raw pointer. */
 function ghostFor(g: GestureState, tool: ToolId, pointer: Vec | null): GhostView | null {
@@ -108,6 +126,10 @@ export function Canvas({ store, coach, onView }: Props) {
   const pulseTimer = useRef(0);
   const overCanvas = useRef(false);
   const ownRevision = useRef(revision); // revision after the canvas's own last commit
+  /** A crossing marked from the keyboard: focus follows it to the point it becomes. */
+  const focusAt = useRef<Vec | null>(null);
+  /** The tool the gesture state belongs to; may lead `tool` until the next render. */
+  const gestureTool = useRef(tool);
 
   useEffect(() => onView?.(vp), [vp, onView]);
 
@@ -116,11 +138,24 @@ export function Canvas({ store, coach, onView }: Props) {
   live.current = { scene, candidates, tool };
 
   // A new construction (level opened or replayed) drops the gesture and transient effects.
+  // When the screen change left focus nowhere (Begin, Next, a map node), it lands here.
   useEffect(() => {
     gesture.current = IDLE;
     setShake(null);
     setPulse(null);
+    const active = document.activeElement;
+    if (!active || active === document.body) svgRef.current?.focus({ preventScroll: true });
   }, [construction]);
+
+  // After a keyboard-marked crossing becomes a point, move focus onto that point.
+  useEffect(() => {
+    const at = focusAt.current;
+    if (!at) return;
+    focusAt.current = null;
+    const o = scene.objects.find((x) => isPointValue(x.value) && dist(x.value, at) <= scene.tol);
+    const el = o && svgRef.current?.querySelector<SVGElement>(`[data-kind=point][data-id="${o.id}"]`);
+    el?.focus({ preventScroll: true });
+  });
 
   // A change the canvas did not commit itself (undo/redo/reset) may remove the gesture's
   // anchor: drop the gesture, its ghost and any snap preview.
@@ -131,8 +166,10 @@ export function Canvas({ store, coach, onView }: Props) {
     setHover(null);
   }, [revision]);
 
-  // Tool switch cancels the gesture in progress.
-  useEffect(() => dispatch({ type: 'tool', tool }), [tool]);
+  // Tool switch cancels the gesture in progress (unless a dispatch already caught up with it).
+  useEffect(() => {
+    if (tool !== gestureTool.current) dispatch({ type: 'tool', tool });
+  }, [tool]);
 
   const local = (e: { clientX: number; clientY: number }): Vec => {
     const r = svgRef.current!.getBoundingClientRect();
@@ -142,7 +179,8 @@ export function Canvas({ store, coach, onView }: Props) {
   const snapAt = (pt: Vec, kind: InputKind, accept?: Kind[]): SnapTarget | null => {
     const v = vpRef.current;
     if (!v) return null;
-    const { scene: s, candidates: c, tool: t } = live.current;
+    const { scene: s, candidates: c } = live.current;
+    const t = store.tool.peek();
     return findSnap(s, c, pt, v, kind, accept ?? (t === 'point' ? POINT_TOOL : TWO_POINT));
   };
 
@@ -175,9 +213,16 @@ export function Canvas({ store, coach, onView }: Props) {
   };
 
   function dispatch(ev: GestureEvent, kind: InputKind = primary.current?.kind ?? 'mouse'): void {
+    // Read the store's tool, not the last render's: a key may switch tools and an Enter
+    // follow before the canvas re-renders. A switch since the gesture began drops it.
+    const t = store.tool.peek();
+    if (t !== gestureTool.current) {
+      gestureTool.current = t;
+      gesture.current = IDLE;
+    }
     const before = gesture.current;
     const r = gestureReducer(before, ev, {
-      tool: live.current.tool,
+      tool: t,
       allocId: () => store.construction().allocId(),
     });
     gesture.current = r.state;
@@ -321,6 +366,44 @@ export function Canvas({ store, coach, onView }: Props) {
     setTick((t) => t + 1);
   };
 
+  // Keyboard stops (points, then crossings): focus previews the snap, or the armed ghost's
+  // end; Enter is a tap on the stop, so two Enters on two points commit a two-point tool.
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const target = (e: Event) => stopTarget(e.target, live.current.scene, live.current.candidates);
+    const onFocusIn = (e: FocusEvent) => {
+      const t = target(e);
+      const v = vpRef.current;
+      if (!t || !v) return;
+      if (gesture.current.mode === 'armed') {
+        setHover(null);
+        dispatch({ type: 'move', target: t, screen: toScreen(v, t.pos) });
+      } else setHover(t);
+    };
+    const onFocusOut = (e: FocusEvent) => {
+      if (target(e) && gesture.current.mode === 'idle') setHover(null);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' || e.repeat || !vpRef.current) return;
+      const t = target(e);
+      if (!t) return;
+      e.preventDefault();
+      const screen = toScreen(vpRef.current, t.pos);
+      if (t.kind === 'candidate') focusAt.current = t.pos;
+      dispatch({ type: 'down', target: t, screen }, 'mouse');
+      dispatch({ type: 'up', target: t, screen }, 'mouse');
+    };
+    svg.addEventListener('focusin', onFocusIn);
+    svg.addEventListener('focusout', onFocusOut);
+    svg.addEventListener('keydown', onKeyDown);
+    return () => {
+      svg.removeEventListener('focusin', onFocusIn);
+      svg.removeEventListener('focusout', onFocusOut);
+      svg.removeEventListener('keydown', onKeyDown);
+    };
+  }, []);
+
   // Keyboard: Space+drag pans, Esc cancels the gesture.
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -411,6 +494,7 @@ export function Canvas({ store, coach, onView }: Props) {
               highlight={pulse}
               ghost={ghost}
               snap={snap}
+              armed={g.mode === 'armed' ? g.from.pos : null}
               lockKey={lockKey}
               goldMatch={goldMatch}
               hintIds={hintIds}

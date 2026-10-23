@@ -191,6 +191,56 @@ describe('My problems: list', () => {
   });
 });
 
+describe('My problems: failed saves and stale stars', () => {
+  it('a new draft the editor could not save stays listed, with the warning', () => {
+    const storage = memoryStorage();
+    storage.setItem = () => {
+      throw new Error('quota');
+    };
+    const { store, host } = mount(storage);
+    click(byText(host, 'New problem'));
+    const ed = activeEditor(store).value!;
+    act(() => ed.setDetails({ title: 'Not lost' }));
+    act(() => ed.exit());
+    expect(store.screen.value).toBe('problems');
+    expect(titles(host)).toEqual(['Not lost']);
+    expect(host.querySelector('.pb-save-warn')!.textContent).toBe(
+      "Couldn't save drafts on this device.",
+    );
+    // Still there after leaving and coming back while storage keeps failing.
+    act(() => store.goToMap());
+    act(() => store.goToProblems());
+    expect(titles(host)).toEqual(['Not lost']);
+  });
+
+  it('an unsaved draft is written once storage works again', () => {
+    const storage = memoryStorage();
+    const setItem = storage.setItem;
+    storage.setItem = () => {
+      throw new Error('quota');
+    };
+    const { store, host } = mount(storage);
+    click(byText(host, 'New problem'));
+    const ed = activeEditor(store).value!;
+    act(() => ed.setDetails({ title: 'Kept' }));
+    storage.setItem = setItem;
+    act(() => ed.exit()); // the exit save itself succeeds now
+    expect(titles(host)).toEqual(['Kept']);
+    expect(loadDrafts(storage).map((d) => d.problem.title)).toEqual(['Kept']);
+    expect(host.querySelector('.pb-save-warn')!.textContent).toBe('');
+  });
+
+  it('stars show only while the problem is the tested one', () => {
+    const p = level1();
+    const storage = memoryStorage([
+      draft('stale', 100, p, { testedHash: 'not-this-problem', stars: [true, true, true] }),
+    ]);
+    const { host } = mount(storage);
+    expect(statuses(host)).toEqual(['Valid']);
+    expect(host.querySelector('.pb-stars')).toBeNull();
+  });
+});
+
 describe('My problems: actions', () => {
   it('Duplicate adds a copy on top, focuses it and keeps the original', () => {
     const storage = memoryStorage([draft('abc', 100, level1())]);

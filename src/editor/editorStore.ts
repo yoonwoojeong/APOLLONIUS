@@ -8,6 +8,7 @@ import { loadDrafts, saveDrafts, type Draft, type DraftProblem } from '../proble
 import { LIMITS, problemPoints, type Problem, type ProblemStep } from '../problems/format';
 import { canonicalJson, isTested, problemHash } from '../problems/hash';
 import { toLevel, type ProblemLevelId } from '../problems/load';
+import { markSaved, markUnsaved } from '../problems/unsaved';
 import { validate } from '../problems/validate';
 import { mergeStars, type Stars } from '../reasoning/stars';
 import type { Store } from '../state/store';
@@ -645,12 +646,14 @@ export function createEditor(
     mode.value = 'test';
     game.openCustomLevel(level, {
       onComplete: (s) => {
+        // Stars belong to the tested problem: a changed problem starts its stars afresh.
+        const old = testedHash.peek() === hash ? stars.peek() : undefined;
         testedHash.value = hash;
-        const old = stars.peek();
         stars.value = old ? mergeStars(old, s) : s;
       },
+      // As Play does: the store keeps neither the test level nor this closure afterwards.
       onExit: () => {
-        game.screen.value = 'editor';
+        game.closeCustomLevel('editor');
         mode.value = 'test';
       },
     });
@@ -681,6 +684,9 @@ export function createEditor(
     const next = i >= 0 ? all.map((x, j) => (j === i ? d : x)) : [...all, d];
     const ok = saveDrafts(storage, next);
     saveFailed.value = !ok;
+    // A draft that could not be saved is kept in memory, so My problems still lists it.
+    if (ok) markSaved(game, localId);
+    else markUnsaved(game, d);
     if (ok) dirty = false;
   };
 

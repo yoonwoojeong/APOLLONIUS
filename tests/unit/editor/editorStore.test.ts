@@ -318,6 +318,57 @@ describe('test mode', () => {
     expect(ed.tested.value).toBe(false);
   });
 
+  test('leaving Test closes the test level, so the game keeps no stale onComplete', () => {
+    const ed = make();
+    const { line } = buildBisector(ed, game);
+    ed.toggleTarget(line);
+    completeDetails(ed);
+    expect(ed.startTest()).toBe(true);
+    game.exitCustomLevel();
+    expect(game.screen.value).toBe('editor');
+    expect(ed.mode.value).toBe('test');
+    expect(game.isCustom.value).toBe(false);
+    expect(game.currentLevel.value.id).not.toBe(`problem:${ed.localId}`);
+  });
+
+  test('stars belong to the tested problem: a changed problem starts its stars afresh', () => {
+    const { storage, m } = memStorage();
+    const ed = make(storage);
+    const { line, a, b } = buildBisector(ed, game);
+    ed.toggleTarget(line);
+    completeDetails(ed);
+    const stored = () => JSON.parse(m.get(DRAFTS_KEY)!).drafts[0];
+    const playWasteful = () => {
+      expect(
+        game.apply({ type: 'add', objects: [{ id: 'zz', def: { type: 'line', a, b } }] }).ok,
+      ).toBe(true);
+      playReferenceInto(game);
+      expect(game.completion.value).not.toBeNull();
+      game.exitCustomLevel();
+    };
+    ed.startTest();
+    playReferenceInto(game);
+    game.exitCustomLevel();
+    ed.dispose();
+    expect(stored().stars).toEqual([true, true, true]);
+
+    const ed2 = make(storage, { ...draft(), ...stored() });
+    ed2.setDetails({ title: 'Bisector 2' });
+    expect(ed2.tested.value).toBe(false);
+    ed2.startTest();
+    playWasteful();
+    ed2.dispose();
+    expect(stored().stars).toEqual([true, false, false]);
+
+    // Same problem again: the best is kept.
+    const ed3 = make(storage, { ...draft(), ...stored() });
+    ed3.startTest();
+    playReferenceInto(game);
+    game.exitCustomLevel();
+    ed3.dispose();
+    expect(stored().stars).toEqual([true, true, true]);
+  });
+
   test('the test level does not share arrays with the editor', () => {
     const ed = make();
     const { line } = buildBisector(ed, game);

@@ -3,9 +3,16 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'preact/hook
 import { openEditor } from '../editor/session';
 import { loadDrafts, newDraft, saveDrafts, type Draft } from '../problems/drafts';
 import type { Problem } from '../problems/format';
-import { isTested } from '../problems/hash';
+import { isTested, problemHash } from '../problems/hash';
 import { exportProblem, importProblemFile } from '../problems/io';
 import { toLevel } from '../problems/load';
+import {
+  clearUnsaved,
+  hasUnsavedDrafts,
+  markUnsaved,
+  saveHasFailed,
+  withUnsaved,
+} from '../problems/unsaved';
 import { validate } from '../problems/validate';
 import { mergeStars, type Stars } from '../reasoning/stars';
 import type { Store } from '../state/store';
@@ -69,17 +76,24 @@ function rowOf(draft: Draft): Row {
 const newestFirst = (a: Draft, b: Draft): number =>
   b.updatedAt - a.updatedAt || b.createdAt - a.createdAt;
 
-/** Stores whose last background save (a Play's stars, a late import) failed while closed. */
-const unsavedFor = new WeakSet<Store>();
-
-/** Merges a Play's stars into the stored draft; progress is never touched. */
+/**
+ * Records a Play's stars on the stored draft; progress is never touched. Stars belong to the
+ * problem they were earned on (its `testedHash`): a Play of the tested problem keeps the best,
+ * and a Play of an untested one — which plays it to completion — marks it tested afresh.
+ */
 function saveStars(store: Store, storage: Storage | null, localId: string, s: Stars): void {
-  const all = loadDrafts(storage);
+  const all = withUnsaved(store, loadDrafts(storage));
   const i = all.findIndex((d) => d.localId === localId);
   if (i < 0) return;
-  const old = all[i]!.stars;
-  all[i] = { ...all[i]!, stars: old ? mergeStars(old, s) : s };
-  if (!saveDrafts(storage, all)) unsavedFor.add(store);
+  const d = all[i]!;
+  const same = isTested(d.testedHash, d.problem);
+  all[i] = {
+    ...d,
+    testedHash: same ? d.testedHash! : problemHash(d.problem as Problem),
+    stars: same && d.stars ? mergeStars(d.stars, s) : s,
+  };
+  if (saveDrafts(storage, all)) clearUnsaved(store);
+  else markUnsaved(store, all[i]);
 }
 
 function download(filename: string, text: string): void {
@@ -133,11 +147,12 @@ interface ImportError {
  */
 export function ProblemsScreen({ store, storage }: Props) {
   // Read on every mount, so returning from the editor or a Play shows what was saved there.
-  const [drafts, setDrafts] = useState<Draft[]>(() => loadDrafts(storage));
+  // Drafts the editor could not save are kept in memory and listed too.
+  const [drafts, setDrafts] = useState<Draft[]>(() => withUnsaved(store, loadDrafts(storage)));
   /** The latest list, for handlers that run after a later render (Undo, an import). */
   const current = useRef(drafts);
   current.current = drafts;
-  const [saveFailed, setSaveFailed] = useState(() => unsavedFor.has(store));
+  const [saveFailed, setSaveFailed] = useState(() => saveHasFailed(store));
   const failedRef = useRef(saveFailed);
   failedRef.current = saveFailed;
   const [notice, setNotice] = useState<Notice | null>(null);
@@ -154,7 +169,9 @@ export function ProblemsScreen({ store, storage }: Props) {
   const mounted = useRef(true);
 
   useEffect(() => {
-    unsavedFor.delete(store);
+    // Kept drafts are tried again; while that fails they stay kept (and the warning stays).
+    if (!hasUnsavedDrafts(store) || saveDrafts(storage, current.current)) clearUnsaved(store);
+    else setSaveFailed(true);
     mounted.current = true;
     return () => void (mounted.current = false);
   }, [store]);
@@ -171,7 +188,10 @@ export function ProblemsScreen({ store, storage }: Props) {
   const commit = (next: Draft[]): void => {
     current.current = next;
     setDrafts(next);
-    setSaveFailed(!saveDrafts(storage, next));
+    const ok = saveDrafts(storage, next);
+    // Everything listed (kept drafts too) is on the device now.
+    if (ok) clearUnsaved(store);
+    setSaveFailed(!ok);
   };
   const showNotice = (text: string): void => setNotice({ key: ++noticeKey.current, text });
   const openSel = (localId: string): string => `[data-open="${localId}"]`;
@@ -290,7 +310,7 @@ export function ProblemsScreen({ store, storage }: Props) {
     const next = [...base, d];
     const ok = saveDrafts(storage, next);
     if (!mounted.current) {
-      if (!ok) unsavedFor.add(store);
+      if (!ok) markUnsaved(store, d);
       return;
     }
     current.current = next;
@@ -460,7 +480,8 @@ function ProblemCard(p: {
         >
           {name}
         </h2>
-        {stars && (
+        {/* Stars belong to the tested problem; once it changes they no longer apply. */}
+        {stars && status === 'Tested' && (
           <span class="pb-stars" role="img" aria-label={`${earned} of 3 stars`}>
             {stars.map((s, k) => (
               <svg key={k} class="pb-star" data-earned={String(s)} viewBox="0 0 24 24">

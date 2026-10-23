@@ -24,7 +24,11 @@ function announcement(
     if (removed.length) return `Undid: ${describeAll(removed, previous)}`;
     return added.length ? 'Undid: Construction reset' : '';
   }
-  const body = added.length ? describeAll(added, scene) : removed.length ? 'Construction reset' : '';
+  const body = added.length
+    ? describeAll(added, scene)
+    : removed.length
+      ? 'Construction reset'
+      : '';
   return body && kind === 'redo' ? `Redid: ${body}` : body;
 }
 

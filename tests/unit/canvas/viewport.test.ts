@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { fit, panBy, toScreen, toWorld, visibleWorldRect, zoomAt } from '../../../src/canvas/viewport';
+import {
+  fit,
+  panBy,
+  toScreen,
+  toWorld,
+  visibleWorldRect,
+  zoomAt,
+} from '../../../src/canvas/viewport';
 import type { Viewport } from '../../../src/canvas/viewport';
 
 const vp: Viewport = { cx: 3, cy: -2, scale: 40, width: 800, height: 600 };
@@ -55,7 +62,10 @@ describe('panBy', () => {
 
 describe('fit', () => {
   const bounds = { x: -3, y: 2, w: 10, h: 6 };
-  for (const [w, h] of [[390, 844], [1280, 800]] as const) {
+  for (const [w, h] of [
+    [390, 844],
+    [1280, 800],
+  ] as const) {
     it(`centres bounds and keeps corners inside padding at ${w}x${h}`, () => {
       const pad = 24;
       const f = fit(bounds, w, h, pad);

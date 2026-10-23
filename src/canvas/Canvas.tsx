@@ -153,7 +153,8 @@ export function Canvas({ store, coach, onView }: Props) {
     if (!at) return;
     focusAt.current = null;
     const o = scene.objects.find((x) => isPointValue(x.value) && dist(x.value, at) <= scene.tol);
-    const el = o && svgRef.current?.querySelector<SVGElement>(`[data-kind=point][data-id="${o.id}"]`);
+    const el =
+      o && svgRef.current?.querySelector<SVGElement>(`[data-kind=point][data-id="${o.id}"]`);
     el?.focus({ preventScroll: true });
   });
 

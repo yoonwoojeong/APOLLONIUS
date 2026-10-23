@@ -79,10 +79,7 @@ describe('candidateIntersections', () => {
 describe('findSnap', () => {
   it('point beats candidate beats curve when all within radius', () => {
     const s = evaluate(
-      [
-        ...base,
-        { id: 'P', def: { type: 'free-point', pos: { x: X.x + 0.5, y: X.y } } },
-      ],
+      [...base, { id: 'P', def: { type: 'free-point', pos: { x: X.x + 0.5, y: X.y } } }],
       20,
     );
     const cs = candidateIntersections(s);
@@ -90,7 +87,9 @@ describe('findSnap', () => {
     expect(findSnap(s, cs, at, vp, 'mouse', ALL)).toMatchObject({ kind: 'point', id: 'P' });
     const t2 = findSnap(sc, cands, at, vp, 'mouse', ALL);
     expect(t2).toMatchObject({ kind: 'candidate' });
-    expect(findSnap(sc, cands, at, vp, 'mouse', ['curve', 'empty'])).toMatchObject({ kind: 'curve' });
+    expect(findSnap(sc, cands, at, vp, 'mouse', ['curve', 'empty'])).toMatchObject({
+      kind: 'curve',
+    });
   });
 
   it('nearest wins among equal-priority targets', () => {
@@ -117,7 +116,10 @@ describe('findSnap', () => {
   it('accept excludes kinds: line tool ignores curves and empty', () => {
     const onCircle = scr(0, 4); // on c1 (radius 4 about A), far from points
     const pts: Array<SnapTarget['kind']> = ['point', 'candidate'];
-    expect(findSnap(sc, cands, onCircle, vp, 'mouse', ALL)).toMatchObject({ kind: 'curve', id: 'c1' });
+    expect(findSnap(sc, cands, onCircle, vp, 'mouse', ALL)).toMatchObject({
+      kind: 'curve',
+      id: 'c1',
+    });
     expect(findSnap(sc, cands, onCircle, vp, 'mouse', pts)).toBeNull();
   });
 

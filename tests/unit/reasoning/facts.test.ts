@@ -11,7 +11,8 @@ const EXPECTED: Record<string, string> = {
   perpendicular: 'P is the midpoint of A and C, so the bisector of AC is perpendicular to ℓ at P.',
   'angle-bisector':
     'VA = VC, so V lies on the perpendicular bisector of AC — which splits the angle evenly.',
-  'circle-center': 'Both lines are perpendicular bisectors of chords, so each passes through the centre.',
+  'circle-center':
+    'Both lines are perpendicular bisectors of chords, so each passes through the centre.',
 };
 
 describe('deriveFacts', () => {
@@ -42,7 +43,10 @@ describe('deriveFacts', () => {
     c.undo();
     c.undo();
     c.undo();
-    c.apply({ type: 'add', objects: [{ id: 'alt', def: { type: 'perp-bisector', a: 'A', b: 'B' } }] });
+    c.apply({
+      type: 'add',
+      objects: [{ id: 'alt', def: { type: 'perp-bisector', a: 'A', b: 'B' } }],
+    });
     const s = c.scene();
     const m = lvl.goal(s);
     expect(m).not.toBeNull();

@@ -39,7 +39,8 @@ export function findSnap(
     for (const o of s.objects) {
       if (!isPointValue(o.value)) continue;
       const d = screenDist(o.value);
-      if (d <= radius && (!best || d < best.d)) best = { t: { kind: 'point', id: o.id, pos: o.value }, d };
+      if (d <= radius && (!best || d < best.d))
+        best = { t: { kind: 'point', id: o.id, pos: o.value }, d };
     }
     if (best) return best.t;
   }
@@ -48,7 +49,8 @@ export function findSnap(
     let best: { t: SnapTarget; d: number } | null = null;
     for (const c of cands) {
       const d = screenDist(c.pos);
-      if (d <= radius && (!best || d < best.d)) best = { t: { kind: 'candidate', c, pos: c.pos }, d };
+      if (d <= radius && (!best || d < best.d))
+        best = { t: { kind: 'candidate', c, pos: c.pos }, d };
     }
     if (best) return best.t;
   }

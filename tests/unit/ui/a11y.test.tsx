@@ -121,7 +121,12 @@ describe('keyboard construction', () => {
     act(() => store.selectTool('point'));
     focus(point(host, 'A'));
     press('Enter');
-    expect(store.construction().scene().objects.filter((o) => !o.given)).toHaveLength(0);
+    expect(
+      store
+        .construction()
+        .scene()
+        .objects.filter((o) => !o.given),
+    ).toHaveLength(0);
   });
 
   it('candidate intersections follow the points in tab order and Enter marks them', () => {
@@ -142,7 +147,10 @@ describe('keyboard construction', () => {
     focus(cand);
     expect(host.querySelector('[data-kind=snap][data-snap=candidate]')).not.toBeNull();
     press('Enter');
-    const added = store.construction().scene().objects.filter((o) => o.def.type === 'intersection');
+    const added = store
+      .construction()
+      .scene()
+      .objects.filter((o) => o.def.type === 'intersection');
     expect(added).toHaveLength(1);
     expect(liveText(host)).toBe('Point C');
     // Focus follows the crossing to the point it became.
@@ -161,7 +169,12 @@ describe('keyboard construction', () => {
     press('Enter');
     focus(host.querySelector('[data-kind=candidate]')!);
     press('Enter');
-    expect(store.construction().scene().objects.some((o) => o.def.type === 'line')).toBe(true);
+    expect(
+      store
+        .construction()
+        .scene()
+        .objects.some((o) => o.def.type === 'line'),
+    ).toBe(true);
     expect(document.activeElement?.getAttribute('data-label')).toBe('C');
   });
 });

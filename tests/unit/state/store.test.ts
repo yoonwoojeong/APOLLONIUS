@@ -102,7 +102,12 @@ test('coincidental solution never completes', () => {
     type: 'add',
     objects: [{ id: 'p', def: { type: 'free-point', pos: { x: 0, y: 0 } } }],
   });
-  expect(s.construction().scene().objects.some((o) => o.id === 'p')).toBe(true);
+  expect(
+    s
+      .construction()
+      .scene()
+      .objects.some((o) => o.id === 'p'),
+  ).toBe(true);
   expect(s.completion.value).toBeNull();
   expect(s.progress.value.levels.midpoint).toBeUndefined();
 });

@@ -41,7 +41,9 @@ export const midpoint: Level = {
     const d = s.byId.get(m.ids[0] as string)?.def;
     if (d?.type !== 'intersection') return FALLBACK;
     const bisectsAB = [d.a, d.b].some((l) =>
-      bisectedPairs(facts, l).some(([p, q]) => (p === 'A' && q === 'B') || (p === 'B' && q === 'A')),
+      bisectedPairs(facts, l).some(
+        ([p, q]) => (p === 'A' && q === 'B') || (p === 'B' && q === 'A'),
+      ),
     );
     if (!bisectsAB) return FALLBACK;
     return `The perpendicular bisector of AB crosses it exactly halfway, at ${labelOf(s, m.ids[0] as string)}.`;

@@ -55,7 +55,10 @@ describe('gestureReducer', () => {
     expect(commits(r.effects)).toEqual([
       {
         type: 'commit',
-        command: { type: 'add', objects: [{ id: 'n1', def: { type: 'circle', center: 'A', through: 'B' } }] },
+        command: {
+          type: 'add',
+          objects: [{ id: 'n1', def: { type: 'circle', center: 'A', through: 'B' } }],
+        },
       },
     ]);
   });
@@ -93,7 +96,8 @@ describe('gestureReducer', () => {
 
   it('perp-bisector from two candidates puts both intersections first', () => {
     const r = run('perp-bisector', [down(cand('a', 'b', 0)), up(cand('a', 'b', 1), 80, 0)]);
-    const cmd = (r.effects[0] as { type: 'commit'; command: { objects: { id: string }[] } }).command;
+    const cmd = (r.effects[0] as { type: 'commit'; command: { objects: { id: string }[] } })
+      .command;
     expect(cmd.objects.map((o) => o.id)).toEqual(['n1', 'n2', 'n3']);
   });
 
@@ -134,7 +138,10 @@ describe('gestureReducer', () => {
     expect(r.effects).toEqual([
       {
         type: 'commit',
-        command: { type: 'add', objects: [{ id: 'n1', def: { type: 'on-curve', curve: 'c1', t: 1.25 } }] },
+        command: {
+          type: 'add',
+          objects: [{ id: 'n1', def: { type: 'on-curve', curve: 'c1', t: 1.25 } }],
+        },
       },
     ]);
   });
@@ -145,7 +152,10 @@ describe('gestureReducer', () => {
     expect(r.effects).toEqual([
       {
         type: 'commit',
-        command: { type: 'add', objects: [{ id: 'n1', def: { type: 'free-point', pos: { x: 2, y: 3 } } }] },
+        command: {
+          type: 'add',
+          objects: [{ id: 'n1', def: { type: 'free-point', pos: { x: 2, y: 3 } } }],
+        },
       },
     ]);
     expect(run('point', [down(A), up(A)]).effects).toEqual([]);
@@ -157,7 +167,10 @@ describe('gestureReducer', () => {
     expect(r.effects).toEqual([
       {
         type: 'commit',
-        command: { type: 'add', objects: [{ id: 'n1', def: { type: 'intersection', a: 'c1', b: 'c2', index: 0 } }] },
+        command: {
+          type: 'add',
+          objects: [{ id: 'n1', def: { type: 'intersection', a: 'c1', b: 'c2', index: 0 } }],
+        },
       },
     ]);
     expect(r.state).toEqual({ mode: 'idle' });
@@ -171,18 +184,31 @@ describe('gestureReducer', () => {
     expect(r2.effects).toEqual([
       {
         type: 'commit',
-        command: { type: 'add', objects: [{ id: 'n1', def: { type: 'circle', center: 'n1', through: 'B' } }] },
+        command: {
+          type: 'add',
+          objects: [{ id: 'n1', def: { type: 'circle', center: 'n1', through: 'B' } }],
+        },
       },
     ]);
   });
 
   it('moving onto a new snap target emits lock once', () => {
-    const r = run('line', [down(A), move(null, 30, 0), move(B, 60, 0), move(B, 61, 0), move(B, 62, 0)]);
+    const r = run('line', [
+      down(A),
+      move(null, 30, 0),
+      move(B, 60, 0),
+      move(B, 61, 0),
+      move(B, 62, 0),
+    ]);
     expect(r.effects).toEqual([{ type: 'lock', target: B }]);
   });
 
   it('armed hover updates current and locks on change', () => {
-    const r = run('line', [move(B, 5, 5), move(B, 6, 5)], { mode: 'armed', from: A, current: null });
+    const r = run('line', [move(B, 5, 5), move(B, 6, 5)], {
+      mode: 'armed',
+      from: A,
+      current: null,
+    });
     expect(r.state).toEqual({ mode: 'armed', from: A, current: B });
     expect(r.effects).toEqual([{ type: 'lock', target: B }]);
   });
@@ -197,7 +223,11 @@ describe('gestureReducer', () => {
   });
 
   it('changing tool while armed → idle', () => {
-    const r = run('line', [{ type: 'tool', tool: 'circle' }], { mode: 'armed', from: A, current: null });
+    const r = run('line', [{ type: 'tool', tool: 'circle' }], {
+      mode: 'armed',
+      from: A,
+      current: null,
+    });
     expect(r).toEqual({ state: { mode: 'idle' }, effects: [] });
   });
 
@@ -216,14 +246,20 @@ describe('gestureReducer', () => {
       const r = run('line', [down(C, 0, 50), up(B, 90, 0)], armed);
       expect(r.state).toEqual({ mode: 'idle' });
       expect(r.effects).toEqual([
-        { type: 'commit', command: { type: 'add', objects: [{ id: 'n1', def: { type: 'line', a: 'C', b: 'B' } }] } },
+        {
+          type: 'commit',
+          command: { type: 'add', objects: [{ id: 'n1', def: { type: 'line', a: 'C', b: 'B' } }] },
+        },
       ]);
     });
 
     it('tap on B commits from-B', () => {
       const r = run('line', [down(B, 90, 0), up(B, 90, 0)], armed);
       expect(r.effects).toEqual([
-        { type: 'commit', command: { type: 'add', objects: [{ id: 'n1', def: { type: 'line', a: 'A', b: 'B' } }] } },
+        {
+          type: 'commit',
+          command: { type: 'add', objects: [{ id: 'n1', def: { type: 'line', a: 'A', b: 'B' } }] },
+        },
       ]);
     });
 

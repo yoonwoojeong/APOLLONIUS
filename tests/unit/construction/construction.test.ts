@@ -117,11 +117,17 @@ suite('Construction', () => {
     expect(c.scene().byId.get('A')?.label).toBe('A');
     const d = new Construction(givens, { A: 'C', B: 'D' }, 10);
     d.apply(addCircle('A', 'B'));
-    d.apply({ type: 'add', objects: [{ id: 'q', def: { type: 'free-point', pos: { x: 1, y: 1 } } }] });
+    d.apply({
+      type: 'add',
+      objects: [{ id: 'q', def: { type: 'free-point', pos: { x: 1, y: 1 } } }],
+    });
     expect(d.scene().byId.get('q')?.label).toBe('E');
     expect(d.scene().byId.get('k')?.label).toBeUndefined();
     d.undo();
-    d.apply({ type: 'add', objects: [{ id: 'r', def: { type: 'free-point', pos: { x: 3, y: 1 } } }] });
+    d.apply({
+      type: 'add',
+      objects: [{ id: 'r', def: { type: 'free-point', pos: { x: 3, y: 1 } } }],
+    });
     expect(d.scene().byId.get('r')?.label).toBe('E');
   });
 

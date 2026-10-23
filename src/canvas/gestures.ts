@@ -24,9 +24,7 @@ export type GestureEvent =
   | { type: 'tool'; tool: ToolId };
 
 export type GestureEffect =
-  | { type: 'commit'; command: Command }
-  | { type: 'invalid' }
-  | { type: 'lock'; target: SnapTarget };
+  { type: 'commit'; command: Command } | { type: 'invalid' } | { type: 'lock'; target: SnapTarget };
 
 type Ctx = { tool: ToolId; allocId: () => ObjId };
 type Result = { state: GestureState; effects: GestureEffect[] };
@@ -54,7 +52,10 @@ function sameTarget(x: SnapTarget | null, y: SnapTarget | null): boolean {
   return sameEndpoint(x, y);
 }
 
-const commit = (objects: ObjSpec[]): GestureEffect => ({ type: 'commit', command: { type: 'add', objects } });
+const commit = (objects: ObjSpec[]): GestureEffect => ({
+  type: 'commit',
+  command: { type: 'add', objects },
+});
 
 function intersectionSpec(t: Extract<SnapTarget, { kind: 'candidate' }>, id: ObjId): ObjSpec {
   return { id, def: { type: 'intersection', a: t.c.a, b: t.c.b, index: t.c.index } };
@@ -74,7 +75,8 @@ function commitTwoPoint(a: Endpoint, b: Endpoint, ctx: Ctx): GestureEffect {
   const ib = resolve(b, specs, ctx);
   const id = ctx.allocId();
   if (ctx.tool === 'circle') specs.push({ id, def: { type: 'circle', center: ia, through: ib } });
-  else if (ctx.tool === 'perp-bisector') specs.push({ id, def: { type: 'perp-bisector', a: ia, b: ib } });
+  else if (ctx.tool === 'perp-bisector')
+    specs.push({ id, def: { type: 'perp-bisector', a: ia, b: ib } });
   else specs.push({ id, def: { type: 'line', a: ia, b: ib } });
   return commit(specs);
 }
@@ -103,7 +105,10 @@ function pointToolCommit(t: SnapTarget | null, ctx: Ctx): GestureEffect[] {
   }
 }
 
-function hover(state: Extract<GestureState, { mode: 'dragging' | 'armed' }>, target: SnapTarget | null): Result {
+function hover(
+  state: Extract<GestureState, { mode: 'dragging' | 'armed' }>,
+  target: SnapTarget | null,
+): Result {
   const lock = target && target.kind !== 'empty' && !sameTarget(state.current, target);
   return {
     state: { ...state, current: target },
@@ -142,16 +147,24 @@ export function gestureReducer(state: GestureState, ev: GestureEvent, ctx: Ctx):
     case 'armed': {
       if (ev.type === 'move') return hover(state, ev.target);
       if (ev.type === 'down') {
-        return { state: { ...state, down: { target: ev.target, startScreen: ev.screen } }, effects: [] };
+        return {
+          state: { ...state, down: { target: ev.target, startScreen: ev.screen } },
+          effects: [],
+        };
       }
       const { down, ...rest } = state;
       const stay: Result = { state: rest, effects: [] };
       const from = state.from;
-      if (!down || !isEndpoint(down.target) || !isEndpoint(from) || !isEndpoint(ev.target)) return stay;
+      if (!down || !isEndpoint(down.target) || !isEndpoint(from) || !isEndpoint(ev.target))
+        return stay;
       const tap = dist(ev.screen, down.startScreen) <= TAP_SLOP_PX;
       if (tap) {
         if (!sameEndpoint(ev.target, down.target)) return stay;
-        return idle([sameEndpoint(down.target, from) ? { type: 'invalid' } : commitTwoPoint(from, down.target, ctx)]);
+        return idle([
+          sameEndpoint(down.target, from)
+            ? { type: 'invalid' }
+            : commitTwoPoint(from, down.target, ctx),
+        ]);
       }
       if (sameEndpoint(down.target, from)) {
         if (sameEndpoint(ev.target, from)) return idle([{ type: 'invalid' }]);

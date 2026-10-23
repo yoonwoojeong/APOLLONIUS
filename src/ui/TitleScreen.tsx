@@ -31,12 +31,7 @@ export function TitleScreen({ hasProgress, onStart }: Props) {
           <circle class="title-arc-end pop-in" cx={ARC.x1} cy={ARC.y} r={2.5} />
         </svg>
         <p class="title-sub">Compass &amp; straightedge puzzles</p>
-        <button
-          ref={start}
-          type="button"
-          class="btn is-primary title-start"
-          onClick={onStart}
-        >
+        <button ref={start} type="button" class="btn is-primary title-start" onClick={onStart}>
           {hasProgress ? 'Continue' : 'Begin'}
           <ArrowIcon />
         </button>

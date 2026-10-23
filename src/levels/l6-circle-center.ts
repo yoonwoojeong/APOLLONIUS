@@ -53,6 +53,8 @@ export const circleCenter: Level = {
     const d = s.byId.get(m.ids[0] as string)?.def;
     if (d?.type !== 'intersection') return FALLBACK;
     const ok = [d.a, d.b].every((l) => bisectedPairs(facts, l).length > 0);
-    return ok ? 'Both lines are perpendicular bisectors of chords, so each passes through the centre.' : FALLBACK;
+    return ok
+      ? 'Both lines are perpendicular bisectors of chords, so each passes through the centre.'
+      : FALLBACK;
   },
 };

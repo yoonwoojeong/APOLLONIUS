@@ -1,5 +1,10 @@
 import { afterEach, expect, test, vi } from 'vitest';
-import { loadProgress, safeStorage, saveProgress, type Progress } from '../../../src/state/persistence';
+import {
+  loadProgress,
+  safeStorage,
+  saveProgress,
+  type Progress,
+} from '../../../src/state/persistence';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -37,7 +42,9 @@ test('corrupt JSON → fresh progress and console.warn', () => {
 
 test('unknown version → fresh progress and console.warn', () => {
   const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-  const p = loadProgress({ getItem: () => JSON.stringify({ version: 2, levels: {}, unlockedTools: ['x'] }) });
+  const p = loadProgress({
+    getItem: () => JSON.stringify({ version: 2, levels: {}, unlockedTools: ['x'] }),
+  });
   expect(p).toEqual({ version: 1, levels: {}, unlockedTools: [] });
   expect(warn).toHaveBeenCalled();
 });

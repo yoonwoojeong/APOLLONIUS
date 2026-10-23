@@ -1,0 +1,54 @@
+:root {
+  --bg: #f7f4ee;
+  --grid: rgb(43 43 48 / 10%);
+  --ink: #2b2b30;
+  --ink-ghost: rgb(43 43 48 / 35%);
+  --gold: #d9a441;
+  --snap: #4a7bd0;
+  --invalid: #c0584f;
+  --surface: #fcfaf6;
+  --muted: rgb(43 43 48 / 55%);
+
+  --stroke: 1.5px;
+  --stroke-given: 2px;
+
+  --t-draw: 220ms;
+  --t-ui: 180ms;
+  --t-star: 120ms;
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  --font-ui: 'Inter Variable', system-ui, sans-serif;
+  --font-display: 'Fraunces Variable', Georgia, serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #14171f;
+    --grid: rgb(232 230 225 / 12%);
+    --ink: #e8e6e1;
+    --ink-ghost: rgb(232 230 225 / 35%);
+    --gold: #e2b457;
+    --snap: #7aa2e8;
+    --invalid: #d9776e;
+    --surface: #1b1f29;
+    --muted: rgb(232 230 225 / 55%);
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #14171f;
+  --grid: rgb(232 230 225 / 12%);
+  --ink: #e8e6e1;
+  --ink-ghost: rgb(232 230 225 / 35%);
+  --gold: #e2b457;
+  --snap: #7aa2e8;
+  --invalid: #d9776e;
+  --surface: #1b1f29;
+  --muted: rgb(232 230 225 / 55%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-draw: 80ms;
+  }
+}

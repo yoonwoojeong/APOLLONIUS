@@ -2,6 +2,7 @@ import { describe as suite, expect, test } from 'vitest';
 import { Construction } from '../../../src/construction/construction';
 import { evaluate } from '../../../src/construction/evaluate';
 import type { Command, ObjDef, ObjSpec } from '../../../src/construction/types';
+import { levelById } from '../../../src/levels';
 
 const givens: ObjSpec[] = [
   { id: 'A', def: { type: 'given-point', pos: { x: 0, y: 0 } } },
@@ -172,5 +173,43 @@ suite('Construction', () => {
     expect(c.allocId()).toBe('o2');
     c.apply(addCircle('A', 'B'));
     expect(c.specs().map((s) => s.id)).toEqual(['A', 'B', 'k']);
+  });
+
+  test('allocId never returns an id already present in the construction', () => {
+    const c = new Construction(
+      [...givens, { id: 'o2', def: { type: 'given-point', pos: { x: 5, y: 0 } } }],
+      { A: 'A', B: 'B', o2: 'Z' },
+      10,
+    );
+    expect(c.apply(addCircle('A', 'B', 'o1')).ok).toBe(true);
+    const a = c.allocId();
+    const b = c.allocId();
+    expect([a, b]).not.toContain('o1');
+    expect([a, b]).not.toContain('o2');
+    expect(a).not.toBe(b);
+  });
+
+  test('steps lists the objects of each active add command since the last reset', () => {
+    // The Level-1 reference played as the game would: one command per object.
+    const l1 = levelById('equilateral');
+    const c = new Construction(l1.givens, l1.labels, l1.sceneDiameter);
+    for (const o of l1.reference.flatMap((st) => st.objects)) {
+      expect(c.apply({ type: 'add', objects: [o] }).ok).toBe(true);
+    }
+    const types = (st: ObjSpec[][]) => st.map((objs) => objs.map((o) => o.def.type));
+    expect(types(c.steps())).toEqual([
+      ['circle'],
+      ['circle'],
+      ['intersection'],
+      ['line'],
+      ['line'],
+    ]);
+    expect(c.steps()[0]).toEqual([l1.reference[0]!.objects[0]]);
+    c.undo();
+    expect(types(c.steps())).toEqual([['circle'], ['circle'], ['intersection'], ['line']]);
+    c.apply({ type: 'reset' });
+    expect(c.steps()).toEqual([]);
+    c.undo();
+    expect(c.steps()).toHaveLength(4);
   });
 });

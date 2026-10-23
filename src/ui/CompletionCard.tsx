@@ -14,6 +14,8 @@ interface Props {
   onNext?: () => void;
   onReplay: () => void;
   onMap: () => void;
+  /** Custom levels: Back is the primary action, and there is no Next or Map. */
+  onBack?: () => void;
 }
 
 const TOOL_TITLES: Record<ToolId, string> = {
@@ -69,23 +71,36 @@ export function CompletionCard(p: Props) {
         </p>
       )}
       <div class="completion-actions">
-        {p.onNext && (
-          <button type="button" class="btn" onClick={p.onMap}>
-            Map
-          </button>
-        )}
-        <button type="button" class="btn" onClick={p.onReplay}>
-          Replay
-        </button>
-        {p.onNext ? (
-          <button ref={primary} type="button" class="btn is-primary" onClick={p.onNext}>
-            Next
-            <ArrowIcon />
-          </button>
+        {p.onBack ? (
+          <>
+            <button type="button" class="btn" onClick={p.onReplay}>
+              Replay
+            </button>
+            <button ref={primary} type="button" class="btn is-primary" onClick={p.onBack}>
+              Back
+            </button>
+          </>
         ) : (
-          <button ref={primary} type="button" class="btn is-primary" onClick={p.onMap}>
-            Map
-          </button>
+          <>
+            {p.onNext && (
+              <button type="button" class="btn" onClick={p.onMap}>
+                Map
+              </button>
+            )}
+            <button type="button" class="btn" onClick={p.onReplay}>
+              Replay
+            </button>
+            {p.onNext ? (
+              <button ref={primary} type="button" class="btn is-primary" onClick={p.onNext}>
+                Next
+                <ArrowIcon />
+              </button>
+            ) : (
+              <button ref={primary} type="button" class="btn is-primary" onClick={p.onMap}>
+                Map
+              </button>
+            )}
+          </>
         )}
       </div>
     </section>

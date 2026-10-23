@@ -1,6 +1,6 @@
 import type { Ref } from 'preact';
 import type { Level } from '../levels/types';
-import { HintIcon, MapIcon } from './icons';
+import { BackIcon, HintIcon, MapIcon } from './icons';
 import { ThemeToggle } from './ThemeToggle';
 
 type Theme = 'light' | 'dark';
@@ -18,6 +18,8 @@ interface Props {
   /** Focus returns here when the hint panel closes. */
   hintRef?: Ref<HTMLButtonElement>;
   onMap: () => void;
+  /** Custom levels: the Map button reads Back (and `onMap` leaves the level). */
+  back?: boolean;
   theme: Theme | undefined;
   onTheme: (t: Theme) => void;
 }
@@ -35,11 +37,11 @@ export function TopBar(props: Props) {
       <button
         type="button"
         class="icon-btn topbar-map"
-        aria-label="Map"
-        title="Map"
+        aria-label={props.back ? 'Back' : 'Map'}
+        title={props.back ? 'Back' : 'Map'}
         onClick={onMap}
       >
-        <MapIcon />
+        {props.back ? <BackIcon /> : <MapIcon />}
       </button>
       <h1 class="topbar-title">
         {level.number !== undefined && (

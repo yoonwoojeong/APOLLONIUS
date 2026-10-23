@@ -33,12 +33,18 @@ export class Construction {
     return this.current;
   }
 
+  /** A fresh `o<n>` id, skipping any id already used by a given or a command in the history. */
   allocId(): ObjId {
-    return `o${this.nextId++}`;
+    const used = new Set(this.givens.map((g) => g.id));
+    for (const c of this.commands) if (c.type === 'add') for (const o of c.objects) used.add(o.id);
+    let id: ObjId;
+    do id = `o${this.nextId++}`;
+    while (used.has(id));
+    return id;
   }
 
-  /** Non-given objects currently in the construction: adds after the last reset, up to cursor. */
-  private activeAdds(): ObjSpec[] {
+  /** Objects of each active add command (after the last reset, up to cursor), one array each. */
+  steps(): ObjSpec[][] {
     let start = 0;
     for (let i = this.cursor - 1; i >= 0; i--) {
       if (this.commands[i]?.type === 'reset') {
@@ -46,12 +52,17 @@ export class Construction {
         break;
       }
     }
-    const out: ObjSpec[] = [];
+    const out: ObjSpec[][] = [];
     for (let i = start; i < this.cursor; i++) {
       const c = this.commands[i];
-      if (c?.type === 'add') out.push(...c.objects);
+      if (c?.type === 'add') out.push([...c.objects]);
     }
     return out;
+  }
+
+  /** Non-given objects currently in the construction, in order. */
+  private activeAdds(): ObjSpec[] {
+    return this.steps().flat();
   }
 
   private activeSpecs(): ObjSpec[] {

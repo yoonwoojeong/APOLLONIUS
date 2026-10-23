@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { dist, sub, type Vec } from '../geometry/vec';
-import { levelById } from '../levels';
 import type { ObjId, Scene } from '../construction/types';
 import type { ToolId } from '../levels/types';
 import type { Store } from '../state/store';
@@ -86,7 +85,7 @@ interface Props {
 export function Canvas({ store, coach, onView }: Props) {
   const tool = store.tool.value;
   const revision = store.revision.value; // re-render on every construction change
-  const level = levelById(store.levelId.value);
+  const level = store.currentLevel.value;
   const construction = store.construction();
   const scene = construction.scene();
   const candidates = useMemo(() => candidateIntersections(scene), [scene]);

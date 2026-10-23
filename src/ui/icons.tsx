@@ -112,3 +112,9 @@ export const ArrowIcon = () => (
     <path d="M5 12h14M13 6l6 6-6 6" />
   </Icon>
 );
+
+export const BackIcon = () => (
+  <Icon>
+    <path d="M19 12H5M11 6l-6 6 6 6" />
+  </Icon>
+);

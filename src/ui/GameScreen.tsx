@@ -6,7 +6,7 @@ import { toScreen, type Viewport } from '../canvas/viewport';
 import type { ObjDef, Scene } from '../construction/types';
 import type { Curve } from '../geometry/curves';
 import type { Vec } from '../geometry/vec';
-import { LEVELS, levelById } from '../levels';
+import { LEVELS, isBuiltInLevelId } from '../levels';
 import type { LevelId, ToolId } from '../levels/types';
 import type { Store } from '../state/store';
 import { CoachMark } from './CoachMark';
@@ -111,7 +111,10 @@ const sessionOf = (store: Store) => {
  */
 export function GameScreen({ store }: { store: Store }) {
   void store.revision.value; // re-render on every construction change
-  const level = levelById(store.levelId.value);
+  const level = store.currentLevel.value;
+  const custom = store.isCustom.value;
+  // Only built-in levels have tips and the tutorial coach; custom levels get neither.
+  const builtInId = !custom && isBuiltInLevelId(level.id) ? level.id : null;
   const construction = store.construction();
   const tools = store.availableTools();
   const completion = store.completion.value;
@@ -123,7 +126,7 @@ export function GameScreen({ store }: { store: Store }) {
   const showHint = hintOpen && tier > 0 && !!hint && !completion;
   const [reveal, setReveal] = useState<ToolId | null>(null);
   const [tip, setTip] = useState<string | null>(null);
-  const tipCfg = TIPS[level.id];
+  const tipCfg = builtInId ? TIPS[builtInId] : undefined;
 
   // Each opened level (a new construction) starts on the circle tool when it has one.
   useLayoutEffect(() => {
@@ -136,8 +139,12 @@ export function GameScreen({ store }: { store: Store }) {
     setReveal(fresh);
     // A level's tip shows the first time that level is opened this session.
     const showTip =
-      !!level.tip && !!tipCfg && available.includes(tipCfg.tool) && !session.tips.has(level.id);
-    if (showTip) session.tips.add(level.id);
+      !!builtInId &&
+      !!level.tip &&
+      !!tipCfg &&
+      available.includes(tipCfg.tool) &&
+      !session.tips.has(builtInId);
+    if (showTip) session.tips.add(builtInId);
     setTip(showTip ? level.tip! : null);
     const t =
       showTip && tipCfg.select
@@ -156,7 +163,7 @@ export function GameScreen({ store }: { store: Store }) {
   // Level 1 tutorial, for players who have not solved the level yet: the current step is the
   // first one not done, so undo moves the coach back.
   const firstTime = useMemo(
-    () => !store.progress.peek().levels[level.id]?.stars[0],
+    () => !!builtInId && !store.progress.peek().levels[builtInId]?.stars[0],
     [construction],
   );
   const scene = construction.scene();
@@ -227,6 +234,7 @@ export function GameScreen({ store }: { store: Store }) {
     hintBtn.current?.focus({ preventScroll: true });
   };
   const isLast = LEVELS[LEVELS.length - 1]!.id === level.id;
+  const exit = custom ? store.exitCustomLevel : store.goToMap;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -266,7 +274,8 @@ export function GameScreen({ store }: { store: Store }) {
         hintOpen={showHint}
         hintDisabled={!!completion}
         hintRef={hintBtn}
-        onMap={store.goToMap}
+        onMap={exit}
+        back={custom}
         theme={store.progress.value.theme}
         onTheme={store.setTheme}
       />
@@ -313,9 +322,10 @@ export function GameScreen({ store }: { store: Store }) {
           explanation={completion.explanation}
           targets={level.targets}
           unlocked={completion.unlocked}
-          onNext={isLast ? undefined : store.nextLevel}
-          onReplay={() => store.openLevel(level.id)}
+          onNext={isLast || custom ? undefined : store.nextLevel}
+          onReplay={store.replayLevel}
           onMap={store.goToMap}
+          onBack={custom ? store.exitCustomLevel : undefined}
         />
       )}
     </div>

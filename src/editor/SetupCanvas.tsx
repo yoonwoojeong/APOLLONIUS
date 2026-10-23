@@ -73,11 +73,19 @@ export function SetupCanvas({ editor, tool, hideCentre }: Props) {
   // never changes the fit scale (grid step, zoom limits) between fits.
   const [fitted, setFitted] = useState({ bounds, key: 0 });
   const view = useViewport(fitted.bounds, fitted.key, svgRef);
+  const { vp, vpRef, size } = view;
+  // A resize before the player pans refits to the givens as they are now, not at the last fit.
+  const sized = useRef(size);
+  useEffect(() => {
+    const was = sized.current;
+    sized.current = size;
+    if (!was || !size || (was.width === size.width && was.height === size.height)) return;
+    if (!view.movedRef.current) setFitted((f) => ({ bounds, key: f.key + 1 }));
+  }, [size?.width, size?.height]);
   const [ids] = useState(() => {
     const n = ++instances;
     return { grid: `setup-grid-${n}`, root: `setup-scene-${n}` };
   });
-  const { vp, vpRef, size } = view;
 
   const [preview, setPreview] = useState<SetupPreview>(null);
   const [snap, setSnap] = useState<SetupTarget | null>(null);

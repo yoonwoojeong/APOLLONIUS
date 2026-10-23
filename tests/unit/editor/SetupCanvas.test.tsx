@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SetupCanvas } from '../../../src/editor/SetupCanvas';
 import { createEditor, type Editor } from '../../../src/editor/editorStore';
 import type { SetupTool } from '../../../src/editor/setupGestures';
@@ -163,15 +163,98 @@ it('placing and dragging points does not change the grid step until a refit', ()
   expect(gridStep(host)).toBe(before); // vp.scale and fitScale agree again
 });
 
+const farPoints = (editor: Editor) =>
+  act(() => {
+    for (const [x, y, l] of [
+      [50, 50, 'A'],
+      [60, 55, 'B'],
+    ] as const) {
+      const id = editor.allocId();
+      editor.applySetup({
+        type: 'add',
+        specs: [{ id, def: { type: 'given-point', pos: { x, y } } }],
+        labels: { [id]: l },
+      });
+    }
+  });
+
+const pointAt = (host: Element, label: string) =>
+  host.querySelector(`[data-kind=point][data-label=${label}]`)!.getAttribute('transform');
+
 it('a double-click does not refit while the point tool is active', () => {
-  const { host, svg } = mount();
-  const before = gridStep(host);
-  tap(svg, 300, 300);
-  tap(svg, 320, 300);
+  const { editor, host, svg, draw } = mount();
+  farPoints(editor);
+  const before = [pointAt(host, 'A'), gridStep(host)];
   act(() => {
     svg.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
   });
-  expect(gridStep(host)).toBe(before);
+  expect([pointAt(host, 'A'), gridStep(host)]).toEqual(before);
+  draw('line'); // the same double-click does refit with another tool
+  act(() => {
+    svg.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+  });
+  expect(pointAt(host, 'A')).not.toBe(before[0]);
+});
+
+describe('resize', () => {
+  let resize: () => void;
+  const setSize = (w: number, h: number) =>
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      left: 0,
+      top: 0,
+      right: w,
+      bottom: h,
+      width: w,
+      height: h,
+      toJSON: () => ({}),
+    } as DOMRect);
+  beforeEach(() => {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(cb: () => void) {
+          resize = cb;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const xy = (host: Element, l: string) =>
+    pointAt(host, l)!
+      .match(/-?[\d.]+/g)!
+      .map(Number) as [number, number];
+
+  it('refits to the current givens before the player pans', () => {
+    const { editor, host } = mount();
+    farPoints(editor); // far from the empty 8x6 frame the view was fitted to
+    setSize(400, 700);
+    act(() => resize());
+    for (const l of ['A', 'B']) {
+      const [x, y] = xy(host, l);
+      expect(x).toBeGreaterThanOrEqual(0);
+      expect(x).toBeLessThanOrEqual(400);
+      expect(y).toBeGreaterThanOrEqual(0);
+      expect(y).toBeLessThanOrEqual(700);
+    }
+  });
+
+  it('keeps the player view after a pan or zoom', () => {
+    const { editor, host, svg } = mount();
+    farPoints(editor);
+    act(() => {
+      svg.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, cancelable: true }));
+    });
+    const gap = () => xy(host, 'B')[0] - xy(host, 'A')[0];
+    const before = gap();
+    setSize(400, 700);
+    act(() => resize());
+    expect(gap()).toBeCloseTo(before);
+  });
 });
 
 function dragged(editor: Editor, svg: Element) {

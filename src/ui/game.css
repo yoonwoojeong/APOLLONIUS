@@ -372,6 +372,18 @@
   rotate: 45deg;
 }
 
+/* Bottom palette: a tip on the first tool opens rightwards so it stays on screen. */
+@media (max-width: 767px) {
+  .tool-slot:first-child .tool-tip {
+    left: -4px;
+    translate: 0 0;
+  }
+
+  .tool-slot:first-child .tool-tip::before {
+    left: 28px;
+  }
+}
+
 .tool-tip-text {
   padding-top: 2px;
   text-wrap: pretty;
@@ -817,5 +829,50 @@
   .tool-btn.is-revealing::after,
   .has-tip .tool-btn.is-revealing::after {
     animation: ui-fade-in 80ms linear both;
+  }
+}
+
+/* Level 1 coach caption: floats over the canvas next to its targets; never takes input. */
+
+.coach {
+  position: absolute;
+  z-index: 1;
+  width: max-content;
+  max-width: min(360px, calc(100% - 24px));
+  padding: 9px 14px 10px;
+  border: 1px solid color-mix(in srgb, var(--snap) 40%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  box-shadow:
+    0 6px 20px rgb(0 0 0 / 10%),
+    0 1px 2px rgb(0 0 0 / 6%);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.4;
+  color: var(--ink);
+  text-wrap: pretty;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity var(--t-ui) var(--ease-out),
+    transform var(--t-ui) var(--ease-out);
+}
+
+.coach:not([data-placed]) {
+  top: 12px;
+  left: 50%;
+  translate: -50% 0;
+}
+
+.coach.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .coach {
+    transform: none;
+    transition: opacity 80ms linear;
   }
 }

@@ -25,8 +25,13 @@ export interface ReferenceStep {
 
 export interface CoachStep {
   text: string;
+  /** Objects that pulse while the step is current. */
   target: ObjId[];
   doneWhen: (s: Scene) => boolean;
+  /** World positions that pulse too, for targets that are not objects yet (e.g. a crossing). */
+  spots?: (s: Scene) => Vec[];
+  /** Tool selected when the step becomes current. */
+  tool?: ToolId;
 }
 
 export type Fact =

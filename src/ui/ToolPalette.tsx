@@ -30,8 +30,9 @@ interface Props {
   onReset: () => void;
   /** A newly available tool: its button scales in with a gold ring. */
   reveal?: ToolId | null;
-  /** One-time inline tip shown next to the revealed tool; tapping it dismisses it. */
+  /** One-time inline tip shown next to `tipTool`; tapping it dismisses it. */
   tip?: string | null;
+  tipTool?: ToolId | null;
   onTipDismiss?: () => void;
 }
 
@@ -43,7 +44,7 @@ export function ToolPalette(p: Props) {
         {p.tools.map((t, i) => {
           const { name, Icon } = TOOLS[t];
           return (
-            <div key={t} class={t === p.reveal && p.tip ? 'tool-slot has-tip' : 'tool-slot'}>
+            <div key={t} class={t === p.tipTool && p.tip ? 'tool-slot has-tip' : 'tool-slot'}>
               <button
                 type="button"
                 class={t === p.reveal ? 'tool-btn is-revealing' : 'tool-btn'}
@@ -58,7 +59,7 @@ export function ToolPalette(p: Props) {
                   {i + 1}
                 </span>
               </button>
-              {t === p.reveal && p.tip && (
+              {t === p.tipTool && p.tip && (
                 <div class="tool-tip" role="status" onClick={p.onTipDismiss}>
                   <span class="tool-tip-text">{p.tip}</span>
                   <button type="button" class="tool-tip-close" aria-label="Dismiss tip">

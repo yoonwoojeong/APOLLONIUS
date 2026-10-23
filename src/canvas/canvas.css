@@ -425,7 +425,56 @@
   stroke-width: 1px;
 }
 
+/* Tutorial targets: a soft halo with a ring rippling out (fade only under reduced motion). */
+.coach-glow {
+  pointer-events: none;
+  animation: fade-in var(--t-ui) var(--ease-out) both;
+}
+
+.coach-halo-dot {
+  fill: var(--snap);
+  opacity: 0.22;
+}
+
+.coach-halo-stroke {
+  fill: none;
+  stroke: var(--snap);
+  stroke-width: 9px;
+  stroke-linecap: round;
+  opacity: 0.16;
+}
+
+.coach-ring {
+  fill: none;
+  stroke: var(--snap);
+  stroke-width: 2px;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: coach-ripple 1.8s var(--ease-out) infinite;
+}
+
+@keyframes coach-ripple {
+  0% {
+    opacity: 0.85;
+    transform: scale(0.55);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .coach-glow {
+    animation-duration: 80ms;
+  }
+
+  .coach-ring {
+    animation: none;
+    opacity: 0.55;
+  }
+
   .draw-in,
   .pop-in {
     stroke-dasharray: none;

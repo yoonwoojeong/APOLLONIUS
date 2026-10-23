@@ -152,6 +152,17 @@ describe('SceneLayer one-shot animations', () => {
     expect(host.querySelector('[data-id="c1"] .hint-halo')).toBeNull();
   });
 
+  it('pulses tutorial targets and spots in their own glow layer outside the object groups', () => {
+    const host = mountWith({ coachIds: ['A', 'missing'], coachSpots: [{ x: 0.5, y: 0.5 }] });
+    const glow = host.querySelector('.coach-glow')!;
+    expect(glow.getAttribute('aria-hidden')).toBe('true');
+    expect(glow.querySelectorAll('[data-coach-id]')).toHaveLength(2);
+    expect(glow.querySelectorAll('.coach-ring')).toHaveLength(2);
+    expect(glow.closest('[data-id]')).toBeNull();
+    expect(host.querySelector('.hint-glow')).toBeNull();
+    expect(host.querySelector('.is-hint')).toBeNull();
+  });
+
   it('draws one dashed hint ghost per ghost value', () => {
     const host = mountWith({
       hintGhost: [

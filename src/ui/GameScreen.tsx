@@ -1,8 +1,13 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { Canvas } from '../canvas/Canvas';
+import { isPointValue } from '../canvas/candidates';
+import { toScreen, type Viewport } from '../canvas/viewport';
+import type { ObjDef } from '../construction/types';
 import { LEVELS, levelById } from '../levels';
-import type { ToolId } from '../levels/types';
+import type { LevelId, ToolId } from '../levels/types';
 import type { Store } from '../state/store';
+import { CoachMark } from './CoachMark';
+import { avoidSamples, placeCaption, type Box } from './coachPlacement';
 import { CompletionCard } from './CompletionCard';
 import { HintPanel } from './HintPanel';
 import { ToolPalette } from './ToolPalette';
@@ -15,8 +20,29 @@ const isTextEntry = (t: EventTarget | null): boolean =>
 
 /** Tools that arrive later and get a reveal the first time they appear in a session. */
 const REVEALABLE: ToolId[] = ['perp-bisector'];
-/** Tools already revealed, per store (one store per session); in memory only. */
-const revealed = new WeakMap<Store, Set<ToolId>>();
+
+/**
+ * Where each level's tip sits (next to a tool button), what dismisses it, and whether the
+ * level opens on that tool while the tip shows.
+ */
+const TIPS: Partial<
+  Record<LevelId, { tool: ToolId; done: (d: ObjDef) => boolean; select?: true }>
+> = {
+  perpendicular: { tool: 'perp-bisector', done: (d) => d.type === 'perp-bisector' },
+  'circle-center': {
+    tool: 'point',
+    done: (d) => d.type === 'on-curve' && d.curve === 'circle',
+    select: true,
+  },
+};
+
+/** What this session has already shown, per store (one store per session); in memory only. */
+const seen = new WeakMap<Store, { tools: Set<ToolId>; tips: Set<LevelId> }>();
+const sessionOf = (store: Store) => {
+  let s = seen.get(store);
+  if (!s) seen.set(store, (s = { tools: new Set(), tips: new Set() }));
+  return s;
+};
 
 /**
  * The level screen: top bar, tool palette and canvas, plus the tool/history shortcuts.
@@ -36,26 +62,71 @@ export function GameScreen({ store }: { store: Store }) {
   const showHint = hintOpen && tier > 0 && !!hint && !completion;
   const [reveal, setReveal] = useState<ToolId | null>(null);
   const [tip, setTip] = useState<string | null>(null);
+  const tipCfg = TIPS[level.id];
 
   // Each opened level (a new construction) starts on the circle tool when it has one.
   useLayoutEffect(() => {
     const available = store.availableTools();
-    const t = available.includes('circle') ? 'circle' : available[0];
-    if (t) store.selectTool(t);
+    const session = sessionOf(store);
     setHintOpen(false);
-    // A later tool appearing for the first time this session scales in, with the level's tip.
-    const seen = revealed.get(store) ?? new Set<ToolId>();
-    revealed.set(store, seen);
-    const fresh = REVEALABLE.find((x) => available.includes(x) && !seen.has(x)) ?? null;
-    if (fresh) seen.add(fresh);
+    // A later tool appearing for the first time this session scales in.
+    const fresh = REVEALABLE.find((x) => available.includes(x) && !session.tools.has(x)) ?? null;
+    if (fresh) session.tools.add(fresh);
     setReveal(fresh);
-    setTip(fresh ? (level.tip ?? null) : null);
+    // A level's tip shows the first time that level is opened this session.
+    const showTip =
+      !!level.tip && !!tipCfg && available.includes(tipCfg.tool) && !session.tips.has(level.id);
+    if (showTip) session.tips.add(level.id);
+    setTip(showTip ? level.tip! : null);
+    const t =
+      showTip && tipCfg.select
+        ? tipCfg.tool
+        : available.includes('circle')
+          ? 'circle'
+          : available[0];
+    if (t) store.selectTool(t);
   }, [construction]);
 
-  // The tip goes away once the revealed tool has been used.
+  // The tip goes away after the first action it describes.
   useEffect(() => {
-    if (tip && reveal && construction.specs().some((s) => s.def.type === reveal)) setTip(null);
+    if (tip && tipCfg && construction.specs().some((s) => tipCfg.done(s.def))) setTip(null);
   });
+
+  // Level 1 tutorial, for players who have not solved the level yet: the current step is the
+  // first one not done, so undo moves the coach back.
+  const firstTime = useMemo(
+    () => !store.progress.peek().levels[level.id]?.stars[0],
+    [construction],
+  );
+  const scene = construction.scene();
+  const coachStep = firstTime ? (level.coach?.find((st) => !st.doneWhen(scene)) ?? null) : null;
+  const coachShown = coachStep && !completion && !showHint ? coachStep : null;
+  const coachTargets = coachShown
+    ? { ids: coachShown.target, spots: coachShown.spots?.(scene) ?? [] }
+    : null;
+
+  // A step that brings its own tool selects it when it becomes current.
+  const lastStep = useRef(coachStep);
+  useEffect(() => {
+    if (coachStep !== lastStep.current && coachStep?.tool) store.selectTool(coachStep.tool);
+    lastStep.current = coachStep;
+  }, [coachStep]);
+
+  // The caption sits next to its targets, clear of the strokes about to be drawn.
+  const [vp, setVp] = useState<Viewport | null>(null);
+  const placeCoach = (box: Box) => {
+    if (!vp || !coachTargets) return null;
+    const targets = [
+      ...coachTargets.ids.flatMap((id) => {
+        const v = scene.byId.get(id)?.value;
+        return v && isPointValue(v) ? [v] : [];
+      }),
+      ...coachTargets.spots,
+    ].map((p) => toScreen(vp, p));
+    // The hint engine's next step, matched to the player's own objects, is what comes next.
+    const avoid = avoidSamples(scene, hint?.ghost ?? [], vp, targets);
+    return placeCaption({ area: { w: vp.width, h: vp.height }, box, targets, avoid });
+  };
 
   // When the panel closes on its own (new hint step, completion) with focus inside it,
   // hand focus back to the Hint button; the completion card takes focus itself.
@@ -132,10 +203,14 @@ export function GameScreen({ store }: { store: Store }) {
         onReset={store.reset}
         reveal={reveal}
         tip={tip}
+        tipTool={tipCfg?.tool ?? null}
         onTipDismiss={() => setTip(null)}
       />
       <main class="game-canvas" onPointerDown={() => setHintOpen(false)}>
-        <Canvas store={store} />
+        <Canvas store={store} coach={coachTargets} onView={setVp} />
+        {firstTime && level.coach && (
+          <CoachMark key={level.id} text={coachShown?.text ?? null} place={placeCoach} />
+        )}
       </main>
       {showHint && (
         <HintPanel

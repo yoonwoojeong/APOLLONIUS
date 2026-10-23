@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { STORAGE_KEY } from '../../../src/state/persistence';
 import { createStore, type Store } from '../../../src/state/store';
+import { COACH_FADE_MS } from '../../../src/ui/CoachMark';
 import { GameScreen } from '../../../src/ui/GameScreen';
 import { levelById } from '../../../src/levels';
 import { playReferenceInto } from '../helpers';
@@ -238,10 +239,12 @@ describe('GameScreen hints, completion and reveal', () => {
     expect(counter(host)).toBe('L 0/4 · E 0/4');
   });
 
+  const unlocked = () =>
+    createStore(storageWith({ version: 1, levels: {}, unlockedTools: ['perp-bisector'] }));
+  const tipSlot = (host: HTMLElement) => host.querySelector('.tool-slot.has-tip');
+
   it('reveals the new tool once per session with its tip; tapping dismisses it', () => {
-    const store = createStore(
-      storageWith({ version: 1, levels: {}, unlockedTools: ['perp-bisector'] }),
-    );
+    const store = unlocked();
     store.openLevel('perpendicular');
     const host = mount(store);
     const tool = button(host, 'Perpendicular bisector')!;
@@ -250,6 +253,7 @@ describe('GameScreen hints, completion and reveal', () => {
     expect(tip.textContent).toContain(
       'New tool: drag between two points to draw their perpendicular bisector.',
     );
+    expect(tipSlot(host)!.contains(tool)).toBe(true);
     act(() => (tip as HTMLElement).click());
     expect(host.querySelector('.tool-tip')).toBeNull();
     act(() => store.openLevel('perpendicular'));
@@ -258,9 +262,7 @@ describe('GameScreen hints, completion and reveal', () => {
   });
 
   it('the tip is dismissed by the first use of the tool', () => {
-    const store = createStore(
-      storageWith({ version: 1, levels: {}, unlockedTools: ['perp-bisector'] }),
-    );
+    const store = unlocked();
     store.openLevel('perpendicular');
     const host = mount(store);
     expect(host.querySelector('.tool-tip')).not.toBeNull();
@@ -271,5 +273,131 @@ describe('GameScreen hints, completion and reveal', () => {
       });
     });
     expect(host.querySelector('.tool-tip')).toBeNull();
+  });
+
+  it('reveals the tool on the first level that has it; each level shows its own tip once', () => {
+    const store = unlocked();
+    store.openLevel('angle-bisector');
+    const host = mount(store);
+    expect(button(host, 'Perpendicular bisector')!.classList.contains('is-revealing')).toBe(true);
+    expect(host.querySelector('.tool-tip')).toBeNull(); // level 5 has no tip
+    act(() => store.openLevel('perpendicular'));
+    expect(button(host, 'Perpendicular bisector')!.classList.contains('is-revealing')).toBe(false);
+    expect(host.querySelector('.tool-tip')!.textContent).toContain('New tool:');
+    act(() => store.openLevel('circle-center'));
+    expect(host.querySelector('.tool-tip')!.textContent).toContain(
+      'Tap the circle to place points on it.',
+    );
+    act(() => store.openLevel('perpendicular'));
+    expect(host.querySelector('.tool-tip')).toBeNull();
+  });
+
+  it('level 6 tip sits by the Point tool, selects it and goes once a point is on the circle', () => {
+    const store = unlocked();
+    store.openLevel('circle-center');
+    const host = mount(store);
+    expect(tipSlot(host)!.contains(button(host, 'Point'))).toBe(true);
+    expect(store.tool.value).toBe('point');
+    act(() => {
+      store.apply({
+        type: 'add',
+        objects: [{ id: 'f', def: { type: 'free-point', pos: { x: 3, y: 3 } } }],
+      });
+    });
+    expect(host.querySelector('.tool-tip')).not.toBeNull(); // not on the circle
+    act(() => {
+      store.apply({
+        type: 'add',
+        objects: [{ id: 'p', def: { type: 'on-curve', curve: 'circle', t: 1 } }],
+      });
+    });
+    expect(host.querySelector('.tool-tip')).toBeNull();
+    act(() => store.openLevel('circle-center'));
+    expect(host.querySelector('.tool-tip')).toBeNull();
+    expect(store.tool.value).toBe('circle');
+  });
+});
+
+describe('GameScreen level 1 coach', () => {
+  const ref = levelById('equilateral').reference;
+  const step = (store: Store, i: number) =>
+    act(() => {
+      store.apply({ type: 'add', objects: ref[i]!.objects });
+    });
+  const coach = (host: HTMLElement) => host.querySelector<HTMLElement>('.coach[role="status"]');
+  const settle = () =>
+    act(() => {
+      vi.advanceTimersByTime(COACH_FADE_MS);
+    });
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('walks a new player through the four steps, one caption at a time', () => {
+    const store = createStore(null);
+    store.openLevel('equilateral');
+    const host = mount(store);
+    const region = coach(host)!;
+    expect(region.textContent).toBe('Drag from A to B to draw a circle.');
+    expect(store.tool.value).toBe('circle');
+    step(store, 0);
+    settle();
+    expect(coach(host)).toBe(region);
+    expect(region.textContent).toBe('Now drag from B to A.');
+    step(store, 1);
+    settle();
+    expect(region.textContent).toBe('Tap where the circles cross.');
+    expect(store.tool.value).toBe('circle');
+    step(store, 2);
+    settle();
+    expect(region.textContent).toBe('Draw lines from your new point to A and to B.');
+    expect(store.tool.value).toBe('line');
+    step(store, 3);
+    expect(region.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('a wrong action leaves the caption; undo moves the coach back', () => {
+    const store = createStore(null);
+    store.openLevel('equilateral');
+    const host = mount(store);
+    act(() => {
+      store.apply({
+        type: 'add',
+        objects: [{ id: 'x', def: { type: 'circle', center: 'B', through: 'A' } }],
+      });
+    });
+    settle();
+    expect(coach(host)!.textContent).toBe('Drag from A to B to draw a circle.');
+    step(store, 0);
+    settle();
+    expect(coach(host)!.textContent).toBe('Tap where the circles cross.');
+    act(() => store.undo());
+    settle();
+    expect(coach(host)!.textContent).toBe('Drag from A to B to draw a circle.');
+  });
+
+  it('hides while the hint panel is open', () => {
+    const store = createStore(null);
+    store.openLevel('equilateral');
+    const host = mount(store);
+    act(() => button(host, 'Hint')!.click());
+    expect(coach(host)!.getAttribute('aria-hidden')).toBe('true');
+    act(() => button(host, 'Close hint')!.click());
+    expect(coach(host)!.getAttribute('aria-hidden')).toBeNull();
+  });
+
+  it('is not shown once level 1 has been completed, nor on other levels', () => {
+    const store = createStore(
+      storageWith({
+        version: 1,
+        levels: { equilateral: { stars: [true, false, false], hintsUsed: 0 } },
+        unlockedTools: [],
+      }),
+    );
+    store.openLevel('equilateral');
+    const host = mount(store);
+    expect(coach(host)).toBeNull();
+    act(() => store.openLevel('perp-bisector'));
+    expect(coach(host)).toBeNull();
   });
 });

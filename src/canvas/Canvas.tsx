@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { dist, sub, type Vec } from '../geometry/vec';
 import { levelById } from '../levels';
+import type { ObjId } from '../construction/types';
 import type { ToolId } from '../levels/types';
 import type { Store } from '../state/store';
 import { candidateIntersections } from './candidates';
@@ -17,7 +18,7 @@ import { gridPattern } from './shapes';
 import { findSnap, type InputKind, type SnapTarget } from './snap';
 import { useSceneAnimation } from './useSceneAnimation';
 import { useViewport } from './useViewport';
-import { toWorld } from './viewport';
+import { toWorld, type Viewport } from './viewport';
 import './canvas.css';
 
 const DOUBLE_TAP_MS = 320;
@@ -55,8 +56,16 @@ function ghostFor(g: GestureState, tool: ToolId, pointer: Vec | null): GhostView
   return to ? { tool, from: g.from.pos, to } : null;
 }
 
+interface Props {
+  store: Store;
+  /** Tutorial targets to pulse: objects by id and world positions. */
+  coach?: { ids: ObjId[]; spots: Vec[] } | null;
+  /** Reports the viewport whenever it changes, for overlays placed in screen space. */
+  onView?: (vp: Viewport | null) => void;
+}
+
 /** The construction canvas: viewport, pointer plumbing, gestures, pinch/pan and keyboard. */
-export function Canvas({ store }: { store: Store }) {
+export function Canvas({ store, coach, onView }: Props) {
   const tool = store.tool.value;
   const revision = store.revision.value; // re-render on every construction change
   const level = levelById(store.levelId.value);
@@ -99,6 +108,8 @@ export function Canvas({ store }: { store: Store }) {
   const pulseTimer = useRef(0);
   const overCanvas = useRef(false);
   const ownRevision = useRef(revision); // revision after the canvas's own last commit
+
+  useEffect(() => onView?.(vp), [vp]);
 
   // Latest render values for event handlers.
   const live = useRef({ scene, candidates, tool });
@@ -404,6 +415,8 @@ export function Canvas({ store }: { store: Store }) {
               goldMatch={goldMatch}
               hintIds={hintIds}
               hintGhost={hintGhost}
+              coachIds={coach?.ids}
+              coachSpots={coach?.spots}
               animating={animating}
               onRetainedEnd={retainedEnd}
               onDrawnIn={drawnIn}

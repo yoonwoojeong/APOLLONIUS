@@ -21,6 +21,7 @@ export const circleCenter: Level = {
   ]),
   targets: { L: 2, E: 6 },
   tools: ['point', 'line', 'circle', 'perp-bisector'],
+  tip: 'Tap the circle to place points on it.',
   goal: (s) => {
     const circle = s.byId.get('circle')?.value;
     if (!isCurve(circle) || circle.kind !== 'circle') return null;

@@ -37,6 +37,9 @@ interface Props {
   goldMatch?: GoalMatch | null;
   /** Hint tier 2: inputs of the hinted step, glowing in a halo layer under the scene. */
   hintIds?: ObjId[];
+  /** Tutorial step targets: objects and world positions that pulse softly. */
+  coachIds?: ObjId[];
+  coachSpots?: Vec[];
   /** Hint tier 3: the hinted step's result, drawn as a dashed gold ghost to trace. */
   hintGhost?: (Vec | Curve)[];
   animating?: Animating | null;
@@ -215,36 +218,44 @@ function DashedShapes({ shapes, cls }: { shapes: Shape[]; cls: string }) {
 }
 
 /**
- * Soft pulsing halos under the hinted inputs. They live outside the object groups so their
- * animation never reaches a curve/point's draw-on `animationend` handler.
+ * Soft pulsing halos under the hinted inputs (`hint`) or the tutorial's targets (`coach`,
+ * which adds a ring rippling out from each point). They live outside the object groups so
+ * their animation never reaches a curve/point's draw-on `animationend` handler.
  */
-function HintGlow({
+function Glow({
+  variant,
   objects,
+  spots = [],
   scene,
   view,
 }: {
+  variant: 'hint' | 'coach';
   objects: SceneObject[];
+  spots?: Vec[];
   scene: Scene;
   view: Viewport;
 }) {
+  const dot = (key: string, p: Vec, id?: ObjId) => {
+    const s = toScreen(view, p);
+    return (
+      <g key={key} {...{ [`data-${variant}-id`]: id ?? key }}>
+        <circle class={`${variant}-halo-dot`} cx={s.x} cy={s.y} r={POINT_R * 3} />
+        {variant === 'coach' && <circle class="coach-ring" cx={s.x} cy={s.y} r={POINT_R * 3} />}
+      </g>
+    );
+  };
   return (
-    <g class="hint-glow" aria-hidden="true">
+    <g class={`${variant}-glow`} aria-hidden="true">
       {objects.map((o) =>
         isPointValue(o.value) ? (
-          <circle
-            key={o.id}
-            data-hint-id={o.id}
-            class="hint-halo-dot"
-            cx={toScreen(view, o.value).x}
-            cy={toScreen(view, o.value).y}
-            r={POINT_R * 3}
-          />
+          dot(o.id, o.value, o.id)
         ) : (
-          <g key={o.id} data-hint-id={o.id}>
-            <ShapeEls shapes={objectShapes(o, scene, view)} cls="hint-halo-stroke" />
+          <g key={o.id} {...{ [`data-${variant}-id`]: o.id }}>
+            <ShapeEls shapes={objectShapes(o, scene, view)} cls={`${variant}-halo-stroke`} />
           </g>
         ),
       )}
+      {spots.map((p, i) => dot(`spot-${i}`, p))}
     </g>
   );
 }
@@ -349,12 +360,20 @@ export function SceneLayer(props: Props) {
   const pulsed = (highlight?.ids ?? []).flatMap((id) => scene.byId.get(id) ?? []);
 
   const glowing = scene.objects.filter((o) => hint.has(o.id) && o.value);
+  const coached = (props.coachIds ?? []).flatMap((id) => {
+    const o = scene.byId.get(id);
+    return o?.value ? [o] : [];
+  });
+  const coachSpots = props.coachSpots ?? [];
   const hintGhost = props.hintGhost ?? [];
 
   return (
     <g class="scene">
       {goldMatch && <Shimmer match={goldMatch} view={view} />}
-      {glowing.length > 0 && <HintGlow objects={glowing} scene={scene} view={view} />}
+      {glowing.length > 0 && <Glow variant="hint" objects={glowing} scene={scene} view={view} />}
+      {coached.length + coachSpots.length > 0 && (
+        <Glow variant="coach" objects={coached} spots={coachSpots} scene={scene} view={view} />
+      )}
       <g class="curves">
         {curves.map((o) => (
           <CurveEl

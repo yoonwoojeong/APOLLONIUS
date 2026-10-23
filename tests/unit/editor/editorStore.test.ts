@@ -201,10 +201,36 @@ describe('targets, details and validation', () => {
     expect(ed.problem.value.par).toEqual({ L: 3, E: 3 });
 
     ed.setDetails({ par: { L: 1, E: 9 } });
-    expect(ed.details.value.par).toEqual({ L: 3, E: 9 });
+    expect(ed.details.value.par).toEqual({ L: null, E: 9 });
     expect(ed.problem.value.par).toEqual({ L: 3, E: 9 });
     ed.toggleTarget(line);
     expect(ed.targets.value).toEqual([]);
+  });
+
+  test('par follows the solution on every axis that is not overridden', () => {
+    const ed = make();
+    const { line } = buildBisector(ed, game);
+    ed.toggleTarget(line);
+    ed.setDetails({ par: { E: 4 } });
+    ed.setDetails({ par: { E: 3 } });
+    expect(ed.details.value.par).toEqual({ L: null, E: null });
+    ed.setDetails({ par: { E: 5 } });
+    expect(ed.details.value.par).toEqual({ L: null, E: 5 });
+    // Shrink the solution: the untouched axis follows, the override stays.
+    ed.removeFrom(3);
+    expect(ed.moves.value).toEqual({ L: 2, E: 2 });
+    expect(ed.problem.value.par).toEqual({ L: 2, E: 5 });
+    ed.setDetails({ par: { L: null, E: null } });
+    expect(ed.problem.value.par).toEqual({ L: 2, E: 2 });
+  });
+
+  test('old saved par {L,E} and null both open', () => {
+    const d = draft();
+    d.problem.par = { L: 6, E: 7 };
+    expect(make(null, d).details.value.par).toEqual({ L: 6, E: 7 });
+    const d2 = draft();
+    d2.problem.par = null as never;
+    expect(make(null, d2).details.value.par).toEqual({ L: null, E: null });
   });
 
   test('text is trimmed in the problem but kept raw in the fields', () => {
@@ -362,7 +388,7 @@ describe('opening drafts', () => {
       explain: '',
       author: '',
       perpBisector: false,
-      par: null,
+      par: { L: null, E: null },
     });
     expect(ed.validation.value.ok).toBe(false);
     expect(ed.broken.value).toBeNull();
@@ -388,7 +414,7 @@ describe('opening drafts', () => {
     const ed2 = make(null, d);
     expect(ed2.solution.value).toEqual(ed1.solution.value);
     expect(ed2.targets.value).toEqual([line]);
-    expect(ed2.details.value.par).toBeNull();
+    expect(ed2.details.value.par).toEqual({ L: null, E: null });
     expect(ed2.allocId()).toBe('g3');
   });
 });

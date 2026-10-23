@@ -1,13 +1,17 @@
 import { LIMITS } from '../problems/format';
 import { CircleIcon, LineIcon, PerpBisectorIcon, PointIcon } from '../ui/icons';
-import type { Editor, EditorDetails } from './editorStore';
+import type { Editor } from './editorStore';
 import { ValidationList } from './ValidationList';
 import './editor.css';
 
 const PAR_MAX = 99;
 
-/** Single-line text: line breaks and tabs become spaces (the format forbids them). */
+/** Single-line text: a pasted line break or tab becomes a space (the format forbids them). */
 const oneLine = (s: string): string => s.replace(/[\r\n\t]+/g, ' ');
+/** Enter would add a line break to a single-line field: ignore it (no caret jump). */
+const noEnter = (e: KeyboardEvent): void => {
+  if (e.key === 'Enter') e.preventDefault();
+};
 
 function TextField(p: {
   field: 'title' | 'goalText' | 'explain' | 'author';
@@ -44,6 +48,7 @@ function TextField(p: {
             {...shared}
             class="field-input is-multi"
             rows={3}
+            onKeyDown={noEnter}
             onInput={(e) => p.onChange(oneLine(e.currentTarget.value))}
           />
         ) : (
@@ -144,8 +149,9 @@ function Stepper(p: {
 export function DetailsPanel({ editor }: { editor: Editor }) {
   const d = editor.details.value;
   const m = editor.moves.value;
-  const par = { L: Math.max(d.par?.L ?? m.L, m.L), E: Math.max(d.par?.E ?? m.E, m.E) };
-  const set = (patch: Partial<EditorDetails>): void => editor.setDetails(patch);
+  // The store's own clamp: what the problem will actually carry.
+  const par = editor.problem.value.par!;
+  const set = (patch: Parameters<Editor['setDetails']>[0]): void => editor.setDetails(patch);
 
   return (
     <div class="details-scroll">
@@ -224,7 +230,7 @@ export function DetailsPanel({ editor }: { editor: Editor }) {
             name="Lines and circles"
             value={par.L}
             min={m.L}
-            onChange={(L) => set({ par: { L, E: par.E } })}
+            onChange={(L) => set({ par: { L } })}
           />
           <Stepper
             id="details-par-E"
@@ -232,10 +238,14 @@ export function DetailsPanel({ editor }: { editor: Editor }) {
             name="Elementary moves"
             value={par.E}
             min={m.E}
-            onChange={(E) => set({ par: { L: par.L, E } })}
+            onChange={(E) => set({ par: { E } })}
           />
-          {d.par && (
-            <button type="button" class="text-btn par-reset" onClick={() => set({ par: null })}>
+          {(d.par.L !== null || d.par.E !== null) && (
+            <button
+              type="button"
+              class="text-btn par-reset"
+              onClick={() => set({ par: { L: null, E: null } })}
+            >
               Match my solution
             </button>
           )}

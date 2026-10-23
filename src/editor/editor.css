@@ -186,14 +186,38 @@
 
 @media (max-width: 399px) {
   .mode-tab {
-    font-size: 13.5px;
+    padding: 0 2px;
+    font-size: 13px;
+  }
+
+  /* The ✓ becomes a small badge on the pill's corner, so every label fits in full. */
+  .mode-check {
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    width: 12px;
+    height: 12px;
+  }
+
+  .mode-check svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  /* The warning is a full-width strip under the header, in the layout (never over content). */
+  .modebar {
+    flex-wrap: wrap;
+  }
+
+  .modebar-end {
+    display: contents;
   }
 
   .save-warn {
-    position: absolute;
-    top: 52px;
-    right: 12px;
-    z-index: 3;
+    flex: 1 0 100%;
+    order: 9;
+    padding: 2px 4px 0;
+    text-align: right;
   }
 }
 
@@ -1140,7 +1164,7 @@ button.check-row:focus-visible {
   flex: none;
 }
 
-.test-play:disabled {
+.test-play[aria-disabled='true'] {
   opacity: 0.4;
   cursor: default;
 }

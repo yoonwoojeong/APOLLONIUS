@@ -26,9 +26,11 @@ export function TestPanel({ editor }: { editor: Editor }) {
           <button
             type="button"
             class="btn is-primary test-play"
-            disabled={!v.ok}
+            aria-disabled={!v.ok}
             aria-describedby={v.ok ? undefined : 'test-reason'}
-            onClick={() => editor.startTest()}
+            onClick={() => {
+              if (v.ok) editor.startTest();
+            }}
           >
             Play test
             <ArrowIcon />

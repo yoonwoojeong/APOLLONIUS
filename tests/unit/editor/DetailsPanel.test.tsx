@@ -4,6 +4,7 @@ import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Editor } from '../../../src/editor/editorStore';
 import { openEditor } from '../../../src/editor/session';
+import { detailsFieldId, modeOfPath } from '../../../src/editor/ValidationList';
 import { newDraft } from '../../../src/problems/drafts';
 import { createStore, type Store } from '../../../src/state/store';
 import { App } from '../../../src/ui/App';
@@ -122,23 +123,39 @@ describe('Details mode', () => {
     expect(pb.getAttribute('aria-checked')).toBe('true');
   });
 
-  it('par stepper cannot go below the solution and resets to it', () => {
+  it('par stepper cannot go below the solution, writes only its axis and can reset', () => {
     const { editor, game, host } = setup();
     build(editor, game);
     click(tab(host, 'Details'));
     expect(editor.moves.value).toEqual({ L: 3, E: 3 });
     expect(host.querySelector('.par-summary')!.textContent).toBe('L 3 · E 3');
-    const dec = host.querySelector<HTMLButtonElement>('[aria-label="Decrease par L"]')!;
-    expect(dec.disabled).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>('[aria-label="Decrease par L"]')!.disabled).toBe(
+      true,
+    );
+    expect(byText(host, 'button', 'Match my solution')).toBeUndefined();
     click(host.querySelector('[aria-label="Increase par E"]'));
     expect(editor.problem.value.par).toEqual({ L: 3, E: 4 });
+    expect(editor.details.value.par).toEqual({ L: null, E: 4 });
     expect(host.querySelector('.par-summary')!.textContent).toBe('L 3 · E 4');
     click(host.querySelector('[aria-label="Decrease par E"]'));
-    click(host.querySelector('[aria-label="Decrease par E"]'));
-    expect(editor.problem.value.par).toEqual({ L: 3, E: 3 });
+    expect(editor.details.value.par).toEqual({ L: null, E: null });
     expect(host.querySelector<HTMLButtonElement>('[aria-label="Decrease par E"]')!.disabled).toBe(
       true,
     );
+    click(host.querySelector('[aria-label="Increase par L"]'));
+    click(byText(host, 'button', 'Match my solution'));
+    expect(editor.details.value.par).toEqual({ L: null, E: null });
+    expect(byText(host, 'button', 'Match my solution')).toBeUndefined();
+  });
+
+  it('Enter in the explanation adds nothing', () => {
+    const { host } = setup();
+    click(tab(host, 'Details'));
+    const ev = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    act(() => {
+      field(host, 'Explanation').dispatchEvent(ev);
+    });
+    expect(ev.defaultPrevented).toBe(true);
   });
 
   it('lists errors and goes to the mode each concerns', () => {
@@ -157,12 +174,88 @@ describe('Details mode', () => {
   });
 });
 
+describe('error paths', () => {
+  it.each([
+    ['givens', 'setup'],
+    ['givens[2].pos', 'setup'],
+    ['labels.A', 'setup'],
+    ['solution', 'solve'],
+    ['solution[3].objects[0]', 'solve'],
+    ['targets', 'solve'],
+    ['targets[0]', 'solve'],
+    ['tools', 'details'],
+    ['tools[1]', 'details'],
+    ['par.L', 'details'],
+    ['par.E', 'details'],
+    ['title', 'details'],
+    ['', 'details'],
+    ['format', 'details'],
+  ])('%s concerns %s', (path, mode) => {
+    expect(modeOfPath(path)).toBe(mode);
+  });
+
+  it.each([
+    ['title', 'details-title'],
+    ['goalText', 'details-goalText'],
+    ['explain', 'details-explain'],
+    ['author', 'details-author'],
+    ['tools', 'details-perp'],
+    ['tools[0]', 'details-perp'],
+    ['par.L', 'details-par-L'],
+    ['par.E', 'details-par-E'],
+    ['par', 'details-par-L'],
+    ['', null],
+    ['format', null],
+    ['givens', null],
+  ])('%s focuses %s', (path, id) => {
+    expect(detailsFieldId(path)).toBe(id);
+  });
+
+  it('clicking a solution error switches to Solve and focuses the step hint', async () => {
+    const { editor, game, host } = setup();
+    act(() => editor.setDetails({ perpBisector: true }));
+    const ids = [-1, 1].map((x) => {
+      const id = editor.allocId();
+      act(() =>
+        editor.applySetup({
+          type: 'add',
+          specs: [{ id, def: { type: 'given-point', pos: { x, y: 0 } } }],
+          labels: { [id]: editor.nextLabel() },
+        }),
+      );
+      return id;
+    });
+    act(() => editor.enterSolve());
+    const oid = game.construction().allocId();
+    act(() => {
+      expect(
+        game.apply({
+          type: 'add',
+          objects: [{ id: oid, def: { type: 'perp-bisector', a: ids[0], b: ids[1] } }],
+        } as never).ok,
+      ).toBe(true);
+    });
+    act(() => editor.toggleTarget(oid));
+    act(() => editor.setDetails({ perpBisector: false, title: 'T', goalText: 'G' }));
+    click(tab(host, 'Details'));
+    const row = byText(host, 'button.check-row', 'Perpendicular Bisector');
+    expect(row).toBeDefined();
+    click(row);
+    expect(editor.mode.value).toBe('solve');
+    await act(() => new Promise((r) => setTimeout(r, 30)));
+    expect(document.activeElement?.classList.contains('step-hint-input')).toBe(true);
+  });
+});
+
 describe('Test mode', () => {
   it('disables Play test with the reason while the problem is invalid', () => {
     const { editor, host } = setup();
     click(tab(host, 'Test'));
     const play = byText(host, 'button', 'Play test') as HTMLButtonElement;
-    expect(play.disabled).toBe(true);
+    expect(play.getAttribute('aria-disabled')).toBe('true');
+    expect(play.getAttribute('aria-describedby')).toBe('test-reason');
+    click(play);
+    expect(editor.mode.value).toBe('test');
     expect(host.querySelector('.test-reason')!.textContent).toMatch(/Fix/);
     expect(host.querySelector('.check-row.is-error')).not.toBeNull();
     expect(editor.startTest()).toBe(false);
@@ -175,7 +268,7 @@ describe('Test mode', () => {
     click(tab(host, 'Test'));
     expect(host.textContent).toContain('Ready to test');
     const play = byText(host, 'button', 'Play test') as HTMLButtonElement;
-    expect(play.disabled).toBe(false);
+    expect(play.getAttribute('aria-disabled')).toBe('false');
     expect(host.textContent).not.toContain('Tested ✓');
     // Replaying the solution in the game completes the level and marks the problem tested.
     click(play);

@@ -30,13 +30,30 @@ export function detailsFieldId(path: string): string | null {
   }
 }
 
-/** Moves focus once the mode has rendered: the field in Details, else the mode's tab. */
+/** In Solve: the step row an error names, focused at its hint (or the ☆ for a target). */
+function solveFocus(path: string): HTMLElement | null {
+  const m = /^(solution|targets)\[(\d+)\]/.exec(path);
+  if (!m) return null;
+  const i = Number(m[2]);
+  const rows = document.querySelectorAll<HTMLElement>('.step-row');
+  const stars = document.querySelectorAll<HTMLElement>('.star-btn[aria-pressed="true"]');
+  const el =
+    m[1] === 'solution'
+      ? (rows.item(i) as HTMLElement | null)?.querySelector<HTMLElement>('.step-hint-input')
+      : stars.item(i);
+  return el ?? null;
+}
+
+/** Moves focus once the mode has rendered: the field in Details, the step in Solve, else the tab. */
 function focusFor(mode: EditorMode, path: string): void {
   const go = (): void => {
     const id = mode === 'details' ? detailsFieldId(path) : null;
     const el =
-      (id && document.getElementById(id)) || document.getElementById(modeTabId(mode)) || null;
-    el?.focus({ preventScroll: false });
+      (id && document.getElementById(id)) ||
+      (mode === 'solve' ? solveFocus(path) : null) ||
+      document.getElementById(modeTabId(mode));
+    el?.focus();
+    el?.scrollIntoView?.({ block: 'nearest' });
   };
   // The mode switch renders on the next frame; Details fields may already be there.
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(go);

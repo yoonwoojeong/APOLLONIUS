@@ -15,14 +15,19 @@ import { applyEdit, type SetupEdit, type SetupModel } from './setupGestures';
 
 export type EditorMode = 'setup' | 'solve' | 'details' | 'test';
 
+export interface ParOverride {
+  L: number | null;
+  E: number | null;
+}
+
 export interface EditorDetails {
   title: string;
   goalText: string;
   explain: string;
   author: string;
   perpBisector: boolean;
-  /** null = use the solution's own moves. */
-  par: { L: number; E: number } | null;
+  /** Per axis: null = follow the solution's own count (spec §5.4); a number is an override. */
+  par: ParOverride;
 }
 
 const AUTOSAVE_MS = 500;
@@ -82,10 +87,10 @@ function normalise(raw: unknown): Opened {
       explain: str(own(p, 'explain')),
       author: str(own(p, 'author')),
       perpBisector: arr(own(p, 'tools')).includes('perp-bisector'),
-      par:
-        isObj(par) && count(own(par, 'L')) && count(own(par, 'E'))
-          ? { L: own(par, 'L') as number, E: own(par, 'E') as number }
-          : null,
+      par: {
+        L: isObj(par) && count(own(par, 'L')) ? (own(par, 'L') as number) : null,
+        E: isObj(par) && count(own(par, 'E')) ? (own(par, 'E') as number) : null,
+      },
     },
   };
 }
@@ -204,11 +209,14 @@ export function createEditor(
   });
   const broken = computed(() => replayed.value.broken);
 
-  /** A stored par equal to the solution's own moves means "follow the solution". */
+  /** A stored par equal to the solution's own count on an axis means "follow the solution". */
   {
     const par = opened.details.par;
     const m = replayed.peek().moves;
-    if (par && par.L === m.L && par.E === m.E) details.value = { ...details.peek(), par: null };
+    details.value = {
+      ...details.peek(),
+      par: { L: par.L === m.L ? null : par.L, E: par.E === m.E ? null : par.E },
+    };
   }
 
   /** Every nudge ever written, by step signature: undo/redo or Reset+Undo bring them back. */
@@ -301,7 +309,10 @@ export function createEditor(
       labels,
       solution: solution.value.map((s) => ({ objects: s.objects, nudge: s.nudge.trim() })),
       targets: targets.value,
-      par: d.par ? { L: Math.max(d.par.L, m.L), E: Math.max(d.par.E, m.E) } : m,
+      par: {
+        L: d.par.L === null ? m.L : Math.max(d.par.L, m.L),
+        E: d.par.E === null ? m.E : Math.max(d.par.E, m.E),
+      },
     };
   });
 
@@ -551,11 +562,21 @@ export function createEditor(
 
   // --- Details ------------------------------------------------------------------------------
 
-  const setDetails = (patch: Partial<EditorDetails>): void => {
-    const next = { ...details.peek(), ...patch };
-    if (patch.par) {
+  const setDetails = (
+    patch: Partial<Omit<EditorDetails, 'par'>> & { par?: Partial<ParOverride> },
+  ): void => {
+    const { par, ...rest } = patch;
+    const cur = details.peek();
+    const next: EditorDetails = { ...cur, ...rest };
+    if (par) {
+      // Only the written axis changes; a value at or below the solution's count follows it.
       const m = replayed.peek().moves;
-      next.par = { L: Math.max(patch.par.L, m.L), E: Math.max(patch.par.E, m.E) };
+      const axis = (k: 'L' | 'E'): number | null => {
+        if (!Object.hasOwn(par, k)) return cur.par[k];
+        const v = par[k];
+        return v === null || v === undefined || v <= m[k] ? null : v;
+      };
+      next.par = { L: axis('L'), E: axis('E') };
     }
     details.value = next;
   };
